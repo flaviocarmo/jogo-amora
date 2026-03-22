@@ -47,6 +47,7 @@ export class Game {
   private lastTime = 0;
   private killCount = 0;
   private totalEnemies = 0;
+  private isTransitioning = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -86,6 +87,7 @@ export class Game {
     this.hud.hideGameOver();
     this.hud.hideVictory();
     this.currentLevel = 0;
+    this.isTransitioning = false;
     this.player = new Player();
     console.log('[GAME] loading level 0...');
     try {
@@ -216,7 +218,7 @@ export class Game {
     }
 
     // Super summon input (Q key)
-    if (this.input.isDown('KeyQ') && this.player.isSuperReady) {
+    if (this.input.isSuperPressed && this.player.isSuperReady) {
       if (this.player.useSuper()) {
         const spawnPos = this.player.position.clone();
         spawnPos.x += Math.sin(this.player.mesh.rotation.y) * 3;
@@ -332,11 +334,13 @@ export class Game {
   }
 
   private async checkLevelComplete() {
-    if (!this.levelData) return;
+    if (!this.levelData || this.isTransitioning) return;
 
     // Level complete when boss is defeated
     const bossDefeated = this.levelData.boss ? !this.levelData.boss.alive : true;
     if (!bossDefeated) return;
+
+    this.isTransitioning = true;
 
     if (this.currentLevel < 5) {
       this.audio.playLevelComplete();
@@ -350,6 +354,8 @@ export class Game {
     } else {
       this.victory();
     }
+
+    this.isTransitioning = false;
   }
 
   private gameOver() {
