@@ -311,20 +311,13 @@ export class Game {
     // Particles
     this.particleSystem.update(dt);
 
-    // Fall off world check
+    // Fall off world check — instant death
     if (this.player.position.y < -20) {
-      this.player.takeDamage(1);
-      this.player.invincibleTimer = 1.5;
-      this.hud.updateHearts(this.player.health, this.player.maxHealth);
+      this.player.health = 0;
+      this.player.alive = false;
+      this.hud.updateHearts(0, this.player.maxHealth);
       this.hud.flashDamage();
-      if (!this.player.alive) {
-        this.gameOver();
-      } else {
-        // Respawn at spawn point
-        const sp = this.levelData.spawnPoint;
-        this.player.body?.setTranslation({ x: sp.x, y: sp.y + 5, z: sp.z }, true);
-        this.player.body?.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      }
+      this.gameOver();
     }
   }
 
