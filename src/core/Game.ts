@@ -16,6 +16,12 @@ import { createLevel3 } from '../scenes/Level3';
 import { createLevel4 } from '../scenes/Level4';
 import { createLevel5 } from '../scenes/Level5';
 import { createLevel6 } from '../scenes/Level6';
+import { createLevel7 } from '../scenes/Level7';
+import { createLevel8 } from '../scenes/Level8';
+import { createLevel9 } from '../scenes/Level9';
+import { createLevel10 } from '../scenes/Level10';
+import { createLevel11 } from '../scenes/Level11';
+import { createLevel12 } from '../scenes/Level12';
 
 enum GameState {
   MENU,
@@ -115,6 +121,8 @@ export class Game {
     const levelNames = [
       'Prado Verde', 'Floresta Sombria', 'Montanha do Trovao',
       'Caverna Cristalina', 'Pantano Nebuloso', 'Castelo do Rei Porco',
+      'Praia Tropical', 'Cidade Abandonada', 'Jardim Encantado',
+      'Vulcao Ardente', 'Cemiterio Sombrio', 'Torre do Imperador',
     ];
     await this.hud.showLevelTransition(levelNames[levelIndex] || 'Fase ???');
     console.log('[GAME] level transition shown');
@@ -129,6 +137,12 @@ export class Game {
       case 3: data = createLevel4(this.physics); break;
       case 4: data = createLevel5(this.physics); break;
       case 5: data = createLevel6(this.physics); break;
+      case 6: data = createLevel7(this.physics); break;
+      case 7: data = createLevel8(this.physics); break;
+      case 8: data = createLevel9(this.physics); break;
+      case 9: data = createLevel10(this.physics); break;
+      case 10: data = createLevel11(this.physics); break;
+      case 11: data = createLevel12(this.physics); break;
       default: data = createLevel1(this.physics);
     }
     console.log('[GAME] level created, enemies:', data.enemies.length, 'biscuits:', data.biscuits.length);
@@ -335,7 +349,7 @@ export class Game {
 
     this.isTransitioning = true;
 
-    if (this.currentLevel < 5) {
+    if (this.currentLevel < 11) {
       this.audio.playLevelComplete();
       this.currentLevel++;
       // Preserve player health across levels

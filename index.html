@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Amora: A Aventura</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -379,18 +379,35 @@
 
     /* On mobile, move power bars to not overlap with joystick */
     @media (max-width: 768px), (pointer: coarse) {
+      .heart { width: 28px; height: 28px; font-size: 24px; line-height: 28px; }
+      #hearts { gap: 4px; top: 10px; left: 10px; }
+
       #power-bar-container {
-        bottom: 185px;
-        width: 150px;
+        bottom: 200px;
+        width: 140px;
+        height: 12px;
       }
       #super-bar-container {
-        bottom: 165px;
-        width: 150px;
+        bottom: 180px;
+        width: 140px;
+        height: 12px;
       }
-      #power-label { bottom: 200px; }
-      #super-label { bottom: 182px; }
+      #power-label { bottom: 216px; font-size: 11px; }
+      #super-label { bottom: 196px; font-size: 11px; }
+
+      #boss-health-container { width: 200px; top: 45px; }
+      #boss-name { font-size: 14px; }
+      #boss-health-bar { height: 8px; }
+
       #controls-hint { display: none; }
       #touch-controls { display: block !important; }
+
+      #joystick-area { bottom: 20px; left: 20px; width: 120px; height: 120px; }
+      #joystick-base { width: 120px; height: 120px; }
+      #joystick-thumb { width: 50px; height: 50px; left: 35px; top: 35px; }
+
+      #touch-buttons { bottom: 20px; right: 20px; gap: 10px; }
+      .touch-btn { width: 60px; height: 60px; font-size: 24px; }
     }
   </style>
 </head>

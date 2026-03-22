@@ -18,6 +18,21 @@ export const PIG_SNOUT = 0xff8866;
 export const PIG_EYE = 0x440000;
 export const BOSS_TINT = 0xff4400;
 
+// Enemies - Cat
+export const CAT_BODY = 0x444444;
+export const CAT_EYE = 0x44ff44;
+
+// Enemies - Rat
+export const RAT_BODY = 0x666655;
+export const RAT_EYE = 0xcc2222;
+export const RAT_TAIL = 0xddaaaa;
+
+// Enemies - Chicken
+export const CHICKEN_BODY = 0xf5f0e0;
+export const CHICKEN_COMB = 0xcc2222;
+export const CHICKEN_BEAK = 0xffaa33;
+export const CHICKEN_LEG = 0xffaa33;
+
 // World - Level 1: Prado Verde
 export const L1_GRASS = 0x4a8c3f;
 export const L1_GRASS_DARK = 0x3a6c2f;
@@ -81,6 +96,61 @@ export const L6_LAVA = 0xff4400;
 export const L6_LAVA_GLOW = 0xff6622;
 export const L6_BANNER = 0x882222;
 export const L6_TORCH = 0xff8833;
+
+// World - Level 7: Praia Tropical
+export const L7_SAND = 0xd4b483;
+export const L7_SAND_DARK = 0xb89960;
+export const L7_SKY_TOP = 0x1188ff;
+export const L7_SKY_BOTTOM = 0x66ccff;
+export const L7_WATER = 0x2299cc;
+export const L7_PALM_TRUNK = 0x8B6914;
+export const L7_PALM_LEAVES = 0x33aa33;
+
+// World - Level 8: Cidade Abandonada
+export const L8_GROUND = 0x555555;
+export const L8_GROUND_DARK = 0x333333;
+export const L8_SKY_TOP = 0x334455;
+export const L8_SKY_BOTTOM = 0x556677;
+export const L8_BUILDING = 0x666666;
+export const L8_BUILDING_DARK = 0x444444;
+export const L8_RUST = 0x884422;
+
+// World - Level 9: Jardim Encantado
+export const L9_GRASS = 0x55bb55;
+export const L9_GRASS_DARK = 0x339933;
+export const L9_SKY_TOP = 0xff88cc;
+export const L9_SKY_BOTTOM = 0xffaadd;
+export const L9_FLOWER_PINK = 0xff66aa;
+export const L9_FLOWER_YELLOW = 0xffdd44;
+export const L9_HEDGE = 0x226622;
+
+// World - Level 10: Vulcao Ardente
+export const L10_GROUND = 0x2a1a0a;
+export const L10_GROUND_DARK = 0x1a0a00;
+export const L10_SKY_TOP = 0x1a0000;
+export const L10_SKY_BOTTOM = 0x4a1a00;
+export const L10_LAVA = 0xff3300;
+export const L10_ROCK = 0x3a2a1a;
+export const L10_ASH = 0x555544;
+
+// World - Level 11: Cemiterio Sombrio
+export const L11_GROUND = 0x2a3a2a;
+export const L11_GROUND_DARK = 0x1a2a1a;
+export const L11_SKY_TOP = 0x0a0a1a;
+export const L11_SKY_BOTTOM = 0x1a1a2a;
+export const L11_TOMBSTONE = 0x888888;
+export const L11_FENCE = 0x333333;
+export const L11_FOG = 0x1a1a2a;
+
+// World - Level 12: Torre do Imperador
+export const L12_GROUND = 0x4a3a2a;
+export const L12_GROUND_DARK = 0x2a1a0a;
+export const L12_SKY_TOP = 0x0a0000;
+export const L12_SKY_BOTTOM = 0x2a0a0a;
+export const L12_TOWER = 0x555555;
+export const L12_GOLD = 0xffcc00;
+export const L12_CARPET = 0x881111;
+export const L12_THRONE = 0x664400;
 
 // Items
 export const BISCUIT_COLOR = 0xddb060;
