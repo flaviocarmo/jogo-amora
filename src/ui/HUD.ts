@@ -6,6 +6,8 @@ export class HUD {
   private bossContainer: HTMLElement;
   private bossNameEl: HTMLElement;
   private bossHealthFill: HTMLElement;
+  private superFill: HTMLElement;
+  private superLabel: HTMLElement;
   private levelTransition: HTMLElement;
 
   constructor() {
@@ -17,6 +19,8 @@ export class HUD {
     this.bossNameEl = document.getElementById('boss-name')!;
     this.bossHealthFill = document.getElementById('boss-health-fill')!;
     this.levelTransition = document.getElementById('level-transition')!;
+    this.superFill = document.getElementById('super-bar-fill')!;
+    this.superLabel = document.getElementById('super-label')!;
   }
 
   updateHearts(current: number, max: number) {
@@ -36,6 +40,17 @@ export class HUD {
     } else {
       this.powerFill.classList.remove('ready');
       this.powerLabel.classList.remove('visible');
+    }
+  }
+
+  updateSuperBar(percent: number, isReady: boolean) {
+    this.superFill.style.width = `${percent * 100}%`;
+    if (isReady) {
+      this.superFill.classList.add('ready');
+      this.superLabel.classList.add('visible');
+    } else {
+      this.superFill.classList.remove('ready');
+      this.superLabel.classList.remove('visible');
     }
   }
 

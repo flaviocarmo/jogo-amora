@@ -23,7 +23,10 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
   scene.add(sky.mesh);
 
   // Lighting (dimmer)
-  const ambientLight = new THREE.AmbientLight(0x334466, 0.4);
+  const hemiLight = new THREE.HemisphereLight(C.L2_SKY_TOP, C.L2_GRASS_DARK, 0.4);
+  scene.add(hemiLight);
+
+  const ambientLight = new THREE.AmbientLight(0x334466, 0.2);
   scene.add(ambientLight);
 
   const dirLight = new THREE.DirectionalLight(0x88aacc, 0.8);
@@ -66,6 +69,7 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
     getHeight: (x, z) => terrain.getHeightAt(x, z),
     minScale: 0.8,
     maxScale: 2.0,
+    treeType: 'pine',
   });
   scene.add(veg.group);
 

@@ -4,8 +4,17 @@ import { Entity } from './Entity';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import { InputManager } from '../core/InputManager';
 import { CameraSystem } from '../systems/CameraSystem';
-import * as C from '../utils/colors';
+// import * as C from '../utils/colors'; // Removido para usar as cores locais simplificadas
 import { clamp } from '../utils/math';
+
+// Cores simplificadas para blocos de cor
+const COLOR_BLACK = 0x111111; // Preto profundo
+const COLOR_GRAY_WHITE = 0xe0e0e0; // Cinza claro / Branco (para o peito e bases das patas)
+const COLOR_NOSE = 0x020202; // Nariz
+const COLOR_EYE = 0x010101; // Olho
+const COLOR_EYE_HIGHLIGHT = 0xffffff; // Brilho do olho
+const COLOR_TONGUE = 0xffa0a0; // Língua
+const POWER_WAVE = 0x00ffff; // Cor do latido (pode ajustar)
 
 export class Player extends Entity {
   private walkSpeed = 8;
@@ -19,12 +28,17 @@ export class Player extends Entity {
   readonly powerChargeTime = 15;
   isPowerReady = false;
 
+  // Super bar (charges only when power is ready)
+  superCharge = 0;
+  readonly superChargeTime = 20;
+  isSuperReady = false;
+
   // Animation
   private walkCycle = 0;
-  private legs: THREE.Mesh[] = [];
-  private bodyMesh!: THREE.Mesh;
+  private legs: THREE.Group[] = []; 
+  private torsoGroup!: THREE.Group;
   private headGroup!: THREE.Group;
-  private tailParts: THREE.Mesh[] = [];
+  private tailMesh!: THREE.Mesh; 
   private mouthMesh!: THREE.Mesh;
 
   // Bark wave visual
@@ -40,133 +54,143 @@ export class Player extends Entity {
     const toonMat = (color: number) => new THREE.MeshToonMaterial({ color });
     const glossMat = (color: number) => new THREE.MeshPhongMaterial({ color, shininess: 100 });
 
-    // Body - fluffy sphere
-    const bodyGeo = new THREE.SphereGeometry(0.6, 12, 10);
-    this.bodyMesh = new THREE.Mesh(bodyGeo, toonMat(C.AMORA_BODY));
-    this.bodyMesh.scale.set(1, 0.75, 0.85);
-    this.bodyMesh.position.y = 0.5;
-    this.mesh.add(this.bodyMesh);
+    this.torsoGroup = new THREE.Group();
+    this.torsoGroup.position.set(0, 0.5, 0);
+    this.mesh.add(this.torsoGroup);
 
-    // Fur puffs around body
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2;
-      const puffGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.12, 6, 5);
-      const puff = new THREE.Mesh(puffGeo, toonMat(i % 3 === 0 ? C.AMORA_FUR_HIGHLIGHT : C.AMORA_FUR_DARK));
-      puff.position.set(
-        Math.cos(angle) * 0.55,
-        0.4 + Math.random() * 0.3,
-        Math.sin(angle) * 0.45
-      );
-      this.mesh.add(puff);
-    }
+    // --- MANE/CHEST (The massive front fluff from the 3D reference) ---
+    // O peito enorme e peludo característico da foto
+    const maneGeo = new THREE.SphereGeometry(0.65, 16, 12);
+    const maneMesh = new THREE.Mesh(maneGeo, toonMat(COLOR_BLACK));
+    maneMesh.scale.set(1.05, 1.0, 1.05); 
+    maneMesh.position.set(0, 0.15, 0.15);
+    this.torsoGroup.add(maneMesh);
 
-    // Head
+    // Mancha cinza no peito
+    const chestGeo = new THREE.SphereGeometry(0.4, 10, 8);
+    const chestMesh = new THREE.Mesh(chestGeo, toonMat(COLOR_GRAY_WHITE));
+    chestMesh.scale.set(1.1, 0.9, 0.5);
+    chestMesh.position.set(0, 0.05, 0.65); // Na frente da juba
+    this.torsoGroup.add(chestMesh);
+
+    // --- BODY/HINDQUARTERS ---
+    // A parte traseira, consideravelmente menor
+    const bodyGeo = new THREE.SphereGeometry(0.5, 12, 10);
+    const bodyMesh = new THREE.Mesh(bodyGeo, toonMat(COLOR_BLACK));
+    bodyMesh.scale.set(0.9, 0.95, 1.1);
+    bodyMesh.position.set(0, 0.05, -0.25);
+    this.torsoGroup.add(bodyMesh);
+
+    // --- CAUDA ---
+    // Cauda deitada planamente sobre as costas, como na referência 3D
+    const tailGeo = new THREE.CapsuleGeometry(0.2, 0.4, 8, 8);
+    this.tailMesh = new THREE.Mesh(tailGeo, toonMat(COLOR_BLACK));
+    this.tailMesh.rotation.x = Math.PI / 2;
+    this.tailMesh.scale.set(1.4, 1.0, 0.7);
+    this.tailMesh.position.set(0, 0.55, -0.4);
+    this.torsoGroup.add(this.tailMesh);
+
+    // --- CABEÇA ---
     this.headGroup = new THREE.Group();
-    this.headGroup.position.set(0, 1.1, 0.25);
-    this.mesh.add(this.headGroup);
+    // Embutida na juba 
+    this.headGroup.position.set(0, 0.6, 0.4);
+    this.torsoGroup.add(this.headGroup);
 
-    const headGeo = new THREE.SphereGeometry(0.42, 10, 8);
-    const headMesh = new THREE.Mesh(headGeo, toonMat(C.AMORA_BODY));
+    // Esfera principal da cabeça
+    const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
+    const headMesh = new THREE.Mesh(headGeo, toonMat(COLOR_BLACK));
     this.headGroup.add(headMesh);
 
-    // Head fur puffs (Pomeranian mane)
-    for (let i = 0; i < 10; i++) {
-      const angle = (i / 10) * Math.PI * 2;
-      const puffGeo = new THREE.SphereGeometry(0.15 + Math.random() * 0.08, 5, 4);
-      const puff = new THREE.Mesh(puffGeo, toonMat(i % 2 === 0 ? C.AMORA_BODY : C.AMORA_FUR_HIGHLIGHT));
-      puff.position.set(
-        Math.cos(angle) * 0.38,
-        Math.sin(angle) * 0.2 - 0.05,
-        Math.sin(angle) * 0.35
-      );
-      this.headGroup.add(puff);
-    }
+    // Focinho (Muzzle) - Bem curto e projetado em branco, como na imagem
+    const snoutGeo = new THREE.SphereGeometry(0.14, 8, 6);
+    const snoutMesh = new THREE.Mesh(snoutGeo, toonMat(COLOR_GRAY_WHITE));
+    snoutMesh.position.set(0, -0.05, 0.32);
+    snoutMesh.scale.set(1.2, 0.85, 1.0);
+    this.headGroup.add(snoutMesh);
 
-    // Snout
-    const snoutGeo = new THREE.SphereGeometry(0.13, 6, 5);
-    const snout = new THREE.Mesh(snoutGeo, toonMat(C.AMORA_FUR_HIGHLIGHT));
-    snout.position.set(0, -0.08, 0.35);
-    snout.scale.set(1, 0.7, 1.1);
-    this.headGroup.add(snout);
+    // Nariz (Ponto preto brilhante em cima do focinho)
+    const noseGeo = new THREE.SphereGeometry(0.04, 6, 5);
+    const noseMesh = new THREE.Mesh(noseGeo, glossMat(COLOR_NOSE));
+    noseMesh.position.set(0, 0.04, 0.44);
+    this.headGroup.add(noseMesh);
 
-    // Nose
-    const noseGeo = new THREE.SphereGeometry(0.06, 6, 5);
-    const nose = new THREE.Mesh(noseGeo, glossMat(C.AMORA_NOSE));
-    nose.position.set(0, -0.02, 0.45);
-    this.headGroup.add(nose);
-
-    // Eyes
+    // Olhos (Separados, arredondados)
     for (const side of [-1, 1]) {
-      const eyeGeo = new THREE.SphereGeometry(0.07, 6, 5);
-      const eye = new THREE.Mesh(eyeGeo, glossMat(C.AMORA_EYE));
-      eye.position.set(side * 0.15, 0.06, 0.32);
-      this.headGroup.add(eye);
+      const eyeGeo = new THREE.SphereGeometry(0.05, 6, 5);
+      const eyeMesh = new THREE.Mesh(eyeGeo, glossMat(COLOR_EYE));
+      eyeMesh.position.set(side * 0.16, 0.08, 0.32);
+      this.headGroup.add(eyeMesh);
 
-      // Eye highlight
-      const highlightGeo = new THREE.SphereGeometry(0.025, 4, 4);
-      const highlight = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: C.AMORA_EYE_HIGHLIGHT }));
-      highlight.position.set(side * 0.13, 0.09, 0.38);
-      this.headGroup.add(highlight);
+      // Brilho do olho
+      const highlightGeo = new THREE.SphereGeometry(0.018, 4, 4);
+      const highlightMesh = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: COLOR_EYE_HIGHLIGHT }));
+      highlightMesh.position.set(side * 0.145, 0.1, 0.355);
+      this.headGroup.add(highlightMesh);
     }
 
-    // Ears (pointed, typical Spitz)
+    // Orelhas (Pequenas, largas na base, pontas arredondadas, anguladas pros lados)
     for (const side of [-1, 1]) {
-      const earGeo = new THREE.ConeGeometry(0.1, 0.22, 4);
-      const ear = new THREE.Mesh(earGeo, toonMat(C.AMORA_BODY));
-      ear.position.set(side * 0.2, 0.35, 0);
-      ear.rotation.z = side * -0.2;
-      this.headGroup.add(ear);
+      const earGeo = new THREE.ConeGeometry(0.12, 0.16, 6);
+      const earMesh = new THREE.Mesh(earGeo, toonMat(COLOR_BLACK));
+      earMesh.position.set(side * 0.22, 0.32, 0.05);
+      earMesh.rotation.z = side * -0.4;
+      earMesh.rotation.x = -0.15;
+      this.headGroup.add(earMesh);
     }
 
-    // Mouth (for bark animation)
+    // Boca (Para latido)
     const mouthGeo = new THREE.SphereGeometry(0.08, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-    this.mouthMesh = new THREE.Mesh(mouthGeo, toonMat(C.AMORA_TONGUE));
-    this.mouthMesh.position.set(0, -0.15, 0.35);
+    this.mouthMesh = new THREE.Mesh(mouthGeo, toonMat(COLOR_TONGUE));
+    this.mouthMesh.position.set(0, -0.1, 0.4);
     this.mouthMesh.visible = false;
     this.headGroup.add(this.mouthMesh);
 
-    // Tail (curled up, typical Pomeranian)
-    for (let i = 0; i < 5; i++) {
-      const radius = 0.1 - i * 0.01;
-      const tailGeo = new THREE.SphereGeometry(radius, 5, 4);
-      const tailPart = new THREE.Mesh(tailGeo, toonMat(i % 2 === 0 ? C.AMORA_BODY : C.AMORA_FUR_HIGHLIGHT));
-      const angle = (i / 5) * Math.PI * 0.8;
-      tailPart.position.set(
-        0,
-        0.7 + Math.sin(angle) * 0.4,
-        -0.4 - Math.cos(angle) * 0.3
-      );
-      this.mesh.add(tailPart);
-      this.tailParts.push(tailPart);
-    }
-
-    // Legs
+    // --- PERNAS ---
+    // Pernas espessas, proporcionais
     const legPositions = [
-      { x: -0.25, z: 0.2 },
-      { x: 0.25, z: 0.2 },
-      { x: -0.25, z: -0.2 },
-      { x: 0.25, z: -0.2 },
+      { x: -0.28, z: 0.3, y: 0.15 }, // Frente Esq
+      { x: 0.28, z: 0.3, y: 0.15 },  // Frente Dir
+      { x: -0.22, z: -0.35, y: 0.15 }, // Tras Esq
+      { x: 0.22, z: -0.35, y: 0.15 },  // Tras Dir
     ];
-    for (const pos of legPositions) {
-      const legGeo = new THREE.CylinderGeometry(0.07, 0.09, 0.35, 6);
-      const leg = new THREE.Mesh(legGeo, toonMat(C.AMORA_FUR_DARK));
-      leg.position.set(pos.x, 0.1, pos.z);
-      this.mesh.add(leg);
-      this.legs.push(leg);
+    for (const [i, pos] of legPositions.entries()) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(pos.x, pos.y, pos.z);
+      
+      const isFront = i < 2;
+      const legColor = isFront ? COLOR_GRAY_WHITE : COLOR_BLACK;
+
+      const legGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.25, 6);
+      const legMesh = new THREE.Mesh(legGeo, toonMat(legColor));
+      legMesh.position.y = 0.05; 
+      legGroup.add(legMesh);
+
+      // Patas redondas/flat
+      const pawGeo = new THREE.SphereGeometry(0.12, 6, 5);
+      const pawMesh = new THREE.Mesh(pawGeo, toonMat(COLOR_GRAY_WHITE));
+      pawMesh.scale.set(1.1, 0.6, 1.2);
+      pawMesh.position.y = -0.1;
+      pawMesh.position.z = 0.03;
+      legGroup.add(pawMesh);
+
+      this.mesh.add(legGroup);
+      this.legs.push(legGroup);
     }
 
-    // Shadow blob
-    const shadowGeo = new THREE.CircleGeometry(0.5, 12);
+    // --- SOMBRA ---
+    const shadowGeo = new THREE.CircleGeometry(0.65, 16);
     const shadowMat = new THREE.MeshBasicMaterial({
       color: 0x000000,
       transparent: true,
       opacity: 0.3,
     });
-    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = 0.02;
-    this.mesh.add(shadow);
+    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.position.y = 0.02;
+    this.mesh.add(shadowMesh);
   }
+
+  // ... (initPhysics e update permanecem os mesmos) ...
 
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number) {
     const bodyDesc = physics.RAPIER.RigidBodyDesc.dynamic()
@@ -175,7 +199,7 @@ export class Player extends Entity {
       .lockRotations();
     this.body = physics.createRigidBody(bodyDesc);
 
-    const colliderDesc = physics.RAPIER.ColliderDesc.capsule(0.3, 0.35)
+    const colliderDesc = physics.RAPIER.ColliderDesc.capsule(0.35, 0.4) // Aumentado um pouco
       .setFriction(0.5)
       .setRestitution(0);
     physics.createCollider(colliderDesc, this.body);
@@ -244,6 +268,15 @@ export class Player extends Entity {
       }
     }
 
+    // Super bar charges only when bark power is full
+    if (this.isPowerReady && !this.isSuperReady) {
+      this.superCharge += dt;
+      if (this.superCharge >= this.superChargeTime) {
+        this.superCharge = this.superChargeTime;
+        this.isSuperReady = true;
+      }
+    }
+
     // Bark wave update
     if (this.barkWaveMesh) {
       this.barkWaveTimer -= dt;
@@ -272,7 +305,7 @@ export class Player extends Entity {
     // Create bark wave visual
     const waveGeo = new THREE.RingGeometry(0.5, 2.5, 16);
     const waveMat = new THREE.MeshBasicMaterial({
-      color: C.POWER_WAVE,
+      color: POWER_WAVE,
       transparent: true,
       opacity: 1,
       side: THREE.DoubleSide,
@@ -285,6 +318,13 @@ export class Player extends Entity {
     this.barkWaveMesh.lookAt(this.mesh.position.clone().add(new THREE.Vector3(0, 1, 0)));
     this.barkWaveTimer = 0.5;
 
+    return true;
+  }
+
+  useSuper(): boolean {
+    if (!this.isSuperReady) return false;
+    this.isSuperReady = false;
+    this.superCharge = 0;
     return true;
   }
 
@@ -307,37 +347,40 @@ export class Player extends Entity {
     return clamp(this.powerCharge / this.powerChargeTime, 0, 1);
   }
 
+  get superPercent(): number {
+    return clamp(this.superCharge / this.superChargeTime, 0, 1);
+  }
+
   private animateWalk() {
     const sin = Math.sin(this.walkCycle);
     const cos = Math.cos(this.walkCycle);
     // Front legs
-    this.legs[0].rotation.x = sin * 0.4;
-    this.legs[1].rotation.x = -sin * 0.4;
+    this.legs[0].rotation.x = sin * 0.5;
+    this.legs[1].rotation.x = -sin * 0.5;
     // Back legs
-    this.legs[2].rotation.x = -sin * 0.4;
-    this.legs[3].rotation.x = sin * 0.4;
-    // Body bobble
-    this.bodyMesh.position.y = 0.5 + Math.abs(cos) * 0.05;
-    // Head bobble
-    this.headGroup.rotation.x = sin * 0.05;
+    this.legs[2].rotation.x = -sin * 0.5;
+    this.legs[3].rotation.x = sin * 0.5;
+    // Troso bobble
+    this.torsoGroup.position.y = 0.5 + Math.abs(cos) * 0.05;
+    // Head rotation
+    this.headGroup.rotation.x = Math.sin(this.walkCycle * 0.5) * 0.05;
     // Tail wag
-    this.tailParts.forEach((t, i) => {
-      t.position.x = Math.sin(this.walkCycle * 2 + i * 0.3) * 0.08;
-    });
+    this.tailMesh.rotation.z = Math.sin(this.walkCycle * 2) * 0.2;
   }
 
   private animateIdle(dt: number) {
     this.walkCycle += dt * 2;
     const breathe = Math.sin(this.walkCycle) * 0.02;
-    this.bodyMesh.scale.y = 0.75 + breathe;
+    
+    // Scale on Y handles the breathing
+    this.torsoGroup.scale.y = 1.0 + breathe;
+    
     // Reset legs
     for (const leg of this.legs) {
       leg.rotation.x *= 0.9;
     }
     // Gentle tail wag
-    this.tailParts.forEach((t, i) => {
-      t.position.x = Math.sin(this.walkCycle * 1.5 + i * 0.5) * 0.04;
-    });
+    this.tailMesh.rotation.z = Math.sin(this.walkCycle * 1.5) * 0.05;
   }
 
   reset(x: number, y: number, z: number) {
@@ -345,6 +388,8 @@ export class Player extends Entity {
     this.alive = true;
     this.powerCharge = 0;
     this.isPowerReady = false;
+    this.superCharge = 0;
+    this.isSuperReady = false;
     this.invincibleTimer = 0;
     if (this.body) {
       this.body.setTranslation({ x, y, z }, true);

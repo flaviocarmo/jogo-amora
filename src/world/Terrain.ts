@@ -64,9 +64,11 @@ export class Terrain {
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const material = new THREE.MeshLambertMaterial({
+    const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      flatShading: true,
+      roughness: 0.85,
+      metalness: 0.05,
+      flatShading: false,
     });
 
     this.mesh = new THREE.Mesh(geometry, material);

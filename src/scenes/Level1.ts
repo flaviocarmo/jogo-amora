@@ -28,11 +28,14 @@ export function createLevel1(physics: PhysicsWorld): LevelData {
   scene.add(sky.mesh);
 
   // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  const hemiLight = new THREE.HemisphereLight(C.L1_SKY_TOP, C.L1_GRASS_DARK, 0.6);
+  scene.add(hemiLight);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
   scene.add(ambientLight);
 
   const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
-  dirLight.position.set(20, 30, 10);
+  dirLight.position.set(20, 30, 20);
   dirLight.castShadow = true;
   dirLight.shadow.mapSize.set(1024, 1024);
   dirLight.shadow.camera.far = 100;
@@ -62,6 +65,7 @@ export function createLevel1(physics: PhysicsWorld): LevelData {
     count: 30,
     areaSize: 70,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
+    treeType: 'oak',
   });
   scene.add(veg.group);
 

@@ -9,6 +9,7 @@ import { Player } from '../entities/Player';
 import { Enemy } from '../entities/enemies/Enemy';
 import { Biscuit } from '../entities/items/Biscuit';
 import { HUD } from '../ui/HUD';
+import { Cookie } from '../entities/Cookie';
 import { createLevel1, type LevelData } from '../scenes/Level1';
 import { createLevel2 } from '../scenes/Level2';
 import { createLevel3 } from '../scenes/Level3';
@@ -34,6 +35,7 @@ export class Game {
   private particleSystem!: ParticleSystem;
   private hud: HUD;
   private player: Player;
+  private cookie: Cookie;
 
   private state = GameState.MENU;
   private currentLevel = 0;
@@ -60,6 +62,7 @@ export class Game {
     this.combatSystem = new CombatSystem();
     this.hud = new HUD();
     this.player = new Player();
+    this.cookie = new Cookie();
 
     window.addEventListener('resize', () => this.onResize());
 
@@ -135,6 +138,10 @@ export class Game {
     this.player.initPhysics(this.physics, data.spawnPoint.x, data.spawnPoint.y, data.spawnPoint.z);
     this.scene.add(this.player.mesh);
 
+    // Add Cookie (ally) to scene
+    this.cookie = new Cookie();
+    this.scene.add(this.cookie.mesh);
+
     // Particle system
     this.particleSystem = new ParticleSystem(this.scene);
 
@@ -145,6 +152,7 @@ export class Game {
     // Update HUD
     this.hud.updateHearts(this.player.health, this.player.maxHealth);
     this.hud.updatePowerBar(0, false);
+    this.hud.updateSuperBar(0, false);
 
     if (data.boss) {
       this.audio.playBossAppear();
@@ -207,6 +215,32 @@ export class Game {
       );
     }
 
+    // Super summon input (Q key)
+    if (this.input.isDown('KeyQ') && this.player.isSuperReady) {
+      if (this.player.useSuper()) {
+        const spawnPos = this.player.position.clone();
+        spawnPos.x += Math.sin(this.player.mesh.rotation.y) * 3;
+        spawnPos.z += Math.cos(this.player.mesh.rotation.y) * 3;
+        this.cookie.summon(spawnPos);
+        this.audio.playPowerReady(); // Reuse power ready sound for summon
+      }
+    }
+
+    // Update Cookie ally
+    if (this.cookie.alive && this.levelData) {
+      this.cookie.update(dt, this.levelData.enemies);
+      // Add bark wave to scene if created
+      if (this.cookie.barkWaveMesh && !this.cookie.barkWaveMesh.parent) {
+        this.scene.add(this.cookie.barkWaveMesh);
+      }
+      // Check if Cookie killed any enemies
+      for (const enemy of this.levelData.enemies) {
+        if (!enemy.alive) {
+          // Will be caught by existing kill tracking
+        }
+      }
+    }
+
     // Camera
     this.cameraSystem.update(
       this.player.position,
@@ -260,6 +294,7 @@ export class Game {
 
     // Update HUD
     this.hud.updatePowerBar(this.player.powerPercent, this.player.isPowerReady);
+    this.hud.updateSuperBar(this.player.superPercent, this.player.isSuperReady);
 
     // Boss health bar
     if (this.levelData.boss && this.levelData.boss.alive) {

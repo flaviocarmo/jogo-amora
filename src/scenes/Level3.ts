@@ -23,11 +23,14 @@ export function createLevel3(physics: PhysicsWorld): LevelData {
   scene.add(sky.mesh);
 
   // Lighting (dramatic)
-  const ambientLight = new THREE.AmbientLight(0x443355, 0.35);
+  const hemiLight = new THREE.HemisphereLight(C.L3_SKY_TOP, C.L3_GROUND_DARK, 0.5);
+  scene.add(hemiLight);
+
+  const ambientLight = new THREE.AmbientLight(0x443355, 0.2);
   scene.add(ambientLight);
 
   const dirLight = new THREE.DirectionalLight(0xccaaee, 0.9);
-  dirLight.position.set(-15, 30, 5);
+  dirLight.position.set(-15, 30, 20);
   dirLight.castShadow = true;
   dirLight.shadow.mapSize.set(1024, 1024);
   dirLight.shadow.camera.far = 120;
@@ -64,6 +67,7 @@ export function createLevel3(physics: PhysicsWorld): LevelData {
     getHeight: (x, z) => terrain.getHeightAt(x, z),
     minScale: 0.5,
     maxScale: 1.0,
+    treeType: 'dead',
   });
   scene.add(veg.group);
 

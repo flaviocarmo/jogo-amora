@@ -13,9 +13,25 @@ export class Rocks {
 
   constructor(config: RocksConfig) {
     this.group = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color: config.color, flatShading: true });
+    // Use Standard material for better lighting interaction (PBR)
+    const mat = new THREE.MeshStandardMaterial({ 
+      color: config.color, 
+      roughness: 0.9, 
+      metalness: 0.1,
+      flatShading: true 
+    });
 
     const half = config.areaSize / 2;
+    const baseGeo = new THREE.DodecahedronGeometry(1, 1);
+    
+    // Add noise to base geometry
+    const positions = baseGeo.attributes.position;
+    for (let j = 0; j < positions.count; j++) {
+      positions.setX(j, positions.getX(j) + randomRange(-0.2, 0.2));
+      positions.setY(j, positions.getY(j) + randomRange(-0.2, 0.2));
+      positions.setZ(j, positions.getZ(j) + randomRange(-0.2, 0.2));
+    }
+    baseGeo.computeVertexNormals();
 
     for (let i = 0; i < config.count; i++) {
       const x = randomRange(-half, half);
@@ -24,27 +40,34 @@ export class Rocks {
 
       const y = config.getHeight(x, z);
 
-      // Distorted icosahedron for natural rock look
-      const geo = new THREE.IcosahedronGeometry(randomRange(0.3, 1.2), 1);
-      const positions = geo.attributes.position;
-      for (let j = 0; j < positions.count; j++) {
-        positions.setX(j, positions.getX(j) + randomRange(-0.15, 0.15));
-        positions.setY(j, positions.getY(j) + randomRange(-0.1, 0.1));
-        positions.setZ(j, positions.getZ(j) + randomRange(-0.15, 0.15));
+      // Create a rock cluster instead of a single rock
+      const rockCluster = new THREE.Group();
+      const numPieces = Math.floor(randomRange(1, 4));
+      
+      for(let p = 0; p < numPieces; p++) {
+        const rockPiece = new THREE.Mesh(baseGeo, mat);
+        rockPiece.position.set(
+          randomRange(-0.5, 0.5), 
+          randomRange(0, 0.5), 
+          randomRange(-0.5, 0.5)
+        );
+        rockPiece.scale.set(
+          randomRange(0.6, 1.5),
+          randomRange(0.4, 1.2),
+          randomRange(0.6, 1.5)
+        );
+        rockPiece.rotation.set(
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+          Math.random() * Math.PI
+        );
+        rockPiece.castShadow = true;
+        rockPiece.receiveShadow = true;
+        rockCluster.add(rockPiece);
       }
-      geo.computeVertexNormals();
 
-      const rock = new THREE.Mesh(geo, mat);
-      rock.position.set(x, y + 0.2, z);
-      rock.scale.set(
-        randomRange(0.8, 1.5),
-        randomRange(0.5, 1.0),
-        randomRange(0.8, 1.5)
-      );
-      rock.rotation.y = Math.random() * Math.PI * 2;
-      rock.castShadow = true;
-      rock.receiveShadow = true;
-      this.group.add(rock);
+      rockCluster.position.set(x, y - 0.2, z);
+      this.group.add(rockCluster);
     }
   }
 }

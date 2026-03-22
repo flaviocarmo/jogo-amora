@@ -79,6 +79,55 @@
       to { box-shadow: 0 0 20px #00ffcc; }
     }
 
+    #super-bar-container {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px;
+      height: 16px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #super-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #8800ff, #ffaa00);
+      border-radius: 6px;
+      transition: width 0.1s linear;
+    }
+
+    #super-bar-fill.ready {
+      background: linear-gradient(90deg, #ffdd00, #ff8800);
+      animation: pulse-glow-gold 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-glow-gold {
+      from { box-shadow: 0 0 5px #ffdd00; }
+      to { box-shadow: 0 0 20px #ffaa00; }
+    }
+
+    #super-label {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+      opacity: 0;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+    }
+
+    #super-label.visible {
+      opacity: 1;
+    }
+
     #power-label {
       position: absolute;
       bottom: 50px;
@@ -269,6 +318,11 @@
     </div>
     <div id="power-label">LATIDO PRONTO! [E]</div>
 
+    <div id="super-bar-container">
+      <div id="super-bar-fill"></div>
+    </div>
+    <div id="super-label">COOKIE! [Q]</div>
+
     <div id="boss-health-container">
       <div id="boss-name"></div>
       <div id="boss-health-bar">
@@ -280,7 +334,7 @@
     <div id="level-transition"></div>
 
     <div id="controls-hint">
-      WASD - Mover | Mouse - Camera | Espaco - Pular | E - Latido
+      WASD - Mover | Mouse - Camera | Espaco - Pular | E - Latido | Q - Chamar Cookie
     </div>
   </div>
 
