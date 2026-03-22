@@ -7,6 +7,7 @@ export const AMORA_NOSE = 0x000000;
 export const AMORA_EYE = 0x010101;
 export const AMORA_EYE_HIGHLIGHT = 0xffffff;
 export const AMORA_TONGUE = 0xff6688;
+export const AMORA_CHEST = 0xe0e0e0;
 
 // Enemies
 export const RABBIT_BODY = 0x888888;

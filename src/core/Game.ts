@@ -201,7 +201,7 @@ export class Game {
     this.physics.step(dt);
 
     // Player update
-    this.player.update(dt, this.input, this.cameraSystem, this.physics);
+    this.player.updatePlayer(dt, this.input, this.cameraSystem, this.physics);
 
     // Bark input
     if (this.input.bark) {

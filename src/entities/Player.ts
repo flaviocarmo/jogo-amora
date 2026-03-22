@@ -4,17 +4,8 @@ import { Entity } from './Entity';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import { InputManager } from '../core/InputManager';
 import { CameraSystem } from '../systems/CameraSystem';
-// import * as C from '../utils/colors'; // Removido para usar as cores locais simplificadas
+import * as C from '../utils/colors';
 import { clamp } from '../utils/math';
-
-// Cores simplificadas para blocos de cor
-const COLOR_BLACK = 0x111111; // Preto profundo
-const COLOR_GRAY_WHITE = 0xe0e0e0; // Cinza claro / Branco (para o peito e bases das patas)
-const COLOR_NOSE = 0x020202; // Nariz
-const COLOR_EYE = 0x010101; // Olho
-const COLOR_EYE_HIGHLIGHT = 0xffffff; // Brilho do olho
-const COLOR_TONGUE = 0xffa0a0; // Língua
-const POWER_WAVE = 0x00ffff; // Cor do latido (pode ajustar)
 
 export class Player extends Entity {
   private walkSpeed = 8;
@@ -61,14 +52,14 @@ export class Player extends Entity {
     // --- MANE/CHEST (The massive front fluff from the 3D reference) ---
     // O peito enorme e peludo característico da foto
     const maneGeo = new THREE.SphereGeometry(0.65, 16, 12);
-    const maneMesh = new THREE.Mesh(maneGeo, toonMat(COLOR_BLACK));
+    const maneMesh = new THREE.Mesh(maneGeo, toonMat(C.AMORA_BODY));
     maneMesh.scale.set(1.05, 1.0, 1.05); 
     maneMesh.position.set(0, 0.15, 0.15);
     this.torsoGroup.add(maneMesh);
 
     // Mancha cinza no peito
     const chestGeo = new THREE.SphereGeometry(0.4, 10, 8);
-    const chestMesh = new THREE.Mesh(chestGeo, toonMat(COLOR_GRAY_WHITE));
+    const chestMesh = new THREE.Mesh(chestGeo, toonMat(C.AMORA_CHEST));
     chestMesh.scale.set(1.1, 0.9, 0.5);
     chestMesh.position.set(0, 0.05, 0.65); // Na frente da juba
     this.torsoGroup.add(chestMesh);
@@ -76,7 +67,7 @@ export class Player extends Entity {
     // --- BODY/HINDQUARTERS ---
     // A parte traseira, consideravelmente menor
     const bodyGeo = new THREE.SphereGeometry(0.5, 12, 10);
-    const bodyMesh = new THREE.Mesh(bodyGeo, toonMat(COLOR_BLACK));
+    const bodyMesh = new THREE.Mesh(bodyGeo, toonMat(C.AMORA_BODY));
     bodyMesh.scale.set(0.9, 0.95, 1.1);
     bodyMesh.position.set(0, 0.05, -0.25);
     this.torsoGroup.add(bodyMesh);
@@ -84,7 +75,7 @@ export class Player extends Entity {
     // --- CAUDA ---
     // Cauda deitada planamente sobre as costas, como na referência 3D
     const tailGeo = new THREE.CapsuleGeometry(0.2, 0.4, 8, 8);
-    this.tailMesh = new THREE.Mesh(tailGeo, toonMat(COLOR_BLACK));
+    this.tailMesh = new THREE.Mesh(tailGeo, toonMat(C.AMORA_BODY));
     this.tailMesh.rotation.x = Math.PI / 2;
     this.tailMesh.scale.set(1.4, 1.0, 0.7);
     this.tailMesh.position.set(0, 0.55, -0.4);
@@ -98,32 +89,32 @@ export class Player extends Entity {
 
     // Esfera principal da cabeça
     const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
-    const headMesh = new THREE.Mesh(headGeo, toonMat(COLOR_BLACK));
+    const headMesh = new THREE.Mesh(headGeo, toonMat(C.AMORA_BODY));
     this.headGroup.add(headMesh);
 
     // Focinho (Muzzle) - Bem curto e projetado em branco, como na imagem
     const snoutGeo = new THREE.SphereGeometry(0.14, 8, 6);
-    const snoutMesh = new THREE.Mesh(snoutGeo, toonMat(COLOR_GRAY_WHITE));
+    const snoutMesh = new THREE.Mesh(snoutGeo, toonMat(C.AMORA_CHEST));
     snoutMesh.position.set(0, -0.05, 0.32);
     snoutMesh.scale.set(1.2, 0.85, 1.0);
     this.headGroup.add(snoutMesh);
 
     // Nariz (Ponto preto brilhante em cima do focinho)
     const noseGeo = new THREE.SphereGeometry(0.04, 6, 5);
-    const noseMesh = new THREE.Mesh(noseGeo, glossMat(COLOR_NOSE));
+    const noseMesh = new THREE.Mesh(noseGeo, glossMat(C.AMORA_NOSE));
     noseMesh.position.set(0, 0.04, 0.44);
     this.headGroup.add(noseMesh);
 
     // Olhos (Separados, arredondados)
     for (const side of [-1, 1]) {
       const eyeGeo = new THREE.SphereGeometry(0.05, 6, 5);
-      const eyeMesh = new THREE.Mesh(eyeGeo, glossMat(COLOR_EYE));
+      const eyeMesh = new THREE.Mesh(eyeGeo, glossMat(C.AMORA_EYE));
       eyeMesh.position.set(side * 0.16, 0.08, 0.32);
       this.headGroup.add(eyeMesh);
 
       // Brilho do olho
       const highlightGeo = new THREE.SphereGeometry(0.018, 4, 4);
-      const highlightMesh = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: COLOR_EYE_HIGHLIGHT }));
+      const highlightMesh = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: C.AMORA_EYE_HIGHLIGHT }));
       highlightMesh.position.set(side * 0.145, 0.1, 0.355);
       this.headGroup.add(highlightMesh);
     }
@@ -131,7 +122,7 @@ export class Player extends Entity {
     // Orelhas (Pequenas, largas na base, pontas arredondadas, anguladas pros lados)
     for (const side of [-1, 1]) {
       const earGeo = new THREE.ConeGeometry(0.12, 0.16, 6);
-      const earMesh = new THREE.Mesh(earGeo, toonMat(COLOR_BLACK));
+      const earMesh = new THREE.Mesh(earGeo, toonMat(C.AMORA_BODY));
       earMesh.position.set(side * 0.22, 0.32, 0.05);
       earMesh.rotation.z = side * -0.4;
       earMesh.rotation.x = -0.15;
@@ -140,7 +131,7 @@ export class Player extends Entity {
 
     // Boca (Para latido)
     const mouthGeo = new THREE.SphereGeometry(0.08, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-    this.mouthMesh = new THREE.Mesh(mouthGeo, toonMat(COLOR_TONGUE));
+    this.mouthMesh = new THREE.Mesh(mouthGeo, toonMat(C.AMORA_TONGUE));
     this.mouthMesh.position.set(0, -0.1, 0.4);
     this.mouthMesh.visible = false;
     this.headGroup.add(this.mouthMesh);
@@ -158,7 +149,7 @@ export class Player extends Entity {
       legGroup.position.set(pos.x, pos.y, pos.z);
       
       const isFront = i < 2;
-      const legColor = isFront ? COLOR_GRAY_WHITE : COLOR_BLACK;
+      const legColor = isFront ? C.AMORA_CHEST : C.AMORA_BODY;
 
       const legGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.25, 6);
       const legMesh = new THREE.Mesh(legGeo, toonMat(legColor));
@@ -167,7 +158,7 @@ export class Player extends Entity {
 
       // Patas redondas/flat
       const pawGeo = new THREE.SphereGeometry(0.12, 6, 5);
-      const pawMesh = new THREE.Mesh(pawGeo, toonMat(COLOR_GRAY_WHITE));
+      const pawMesh = new THREE.Mesh(pawGeo, toonMat(C.AMORA_CHEST));
       pawMesh.scale.set(1.1, 0.6, 1.2);
       pawMesh.position.y = -0.1;
       pawMesh.position.z = 0.03;
@@ -205,7 +196,7 @@ export class Player extends Entity {
     physics.createCollider(colliderDesc, this.body);
   }
 
-  update(dt: number, input: InputManager, camera: CameraSystem, physics: PhysicsWorld) {
+  updatePlayer(dt: number, input: InputManager, camera: CameraSystem, physics: PhysicsWorld) {
     super.update(dt);
     if (!this.body || !this.alive) return;
 
@@ -305,7 +296,7 @@ export class Player extends Entity {
     // Create bark wave visual
     const waveGeo = new THREE.RingGeometry(0.5, 2.5, 16);
     const waveMat = new THREE.MeshBasicMaterial({
-      color: POWER_WAVE,
+      color: C.POWER_WAVE,
       transparent: true,
       opacity: 1,
       side: THREE.DoubleSide,
