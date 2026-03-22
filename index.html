@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amora: A Aventura</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #game-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      z-index: 10;
+    }
+
+    #hearts {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .heart {
+      width: 40px;
+      height: 40px;
+      font-size: 36px;
+      line-height: 40px;
+      text-align: center;
+      filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));
+      transition: transform 0.2s, opacity 0.3s;
+    }
+
+    .heart.lost {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+
+    #power-bar-container {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px;
+      height: 16px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #power-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff6b00, #ffaa00, #ffdd00);
+      border-radius: 6px;
+      transition: width 0.1s linear;
+    }
+
+    #power-bar-fill.ready {
+      background: linear-gradient(90deg, #00ff88, #00ffcc);
+      animation: pulse-glow 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-glow {
+      from { box-shadow: 0 0 5px #00ff88; }
+      to { box-shadow: 0 0 20px #00ffcc; }
+    }
+
+    #power-label {
+      position: absolute;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #power-label.visible {
+      opacity: 1;
+    }
+
+    #damage-flash {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255, 0, 0, 0.3);
+      opacity: 0;
+      transition: opacity 0.1s;
+      pointer-events: none;
+    }
+
+    #level-transition {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 48px;
+      font-weight: bold;
+      text-shadow: 0 0 20px rgba(255,255,255,0.5);
+      transition: opacity 0.5s;
+    }
+
+    #boss-health-container {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #boss-health-container.visible {
+      opacity: 1;
+    }
+
+    #boss-name {
+      color: #ff4444;
+      font-size: 18px;
+      font-weight: bold;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+      margin-bottom: 4px;
+    }
+
+    #boss-health-bar {
+      width: 100%;
+      height: 12px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid #ff4444;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    #boss-health-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff0000, #ff4444);
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+
+    #menu-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #1a0a2e, #2d1b4e, #1a0a2e);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      pointer-events: all;
+    }
+
+    #menu-screen h1 {
+      font-size: 64px;
+      color: #ffcc00;
+      text-shadow: 0 0 30px rgba(255,204,0,0.5), 3px 3px 0 #8B4513;
+      margin-bottom: 10px;
+    }
+
+    #menu-screen h2 {
+      font-size: 28px;
+      color: #ffaa66;
+      margin-bottom: 40px;
+      font-weight: normal;
+    }
+
+    #menu-screen .menu-btn {
+      padding: 15px 50px;
+      font-size: 24px;
+      background: linear-gradient(180deg, #ff8800, #cc5500);
+      color: #fff;
+      border: 3px solid #ffaa00;
+      border-radius: 12px;
+      cursor: pointer;
+      pointer-events: all;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    #menu-screen .menu-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 20px rgba(255,136,0,0.5);
+    }
+
+    #game-over-screen, #victory-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      pointer-events: all;
+    }
+
+    #game-over-screen {
+      background: rgba(80, 0, 0, 0.9);
+    }
+
+    #game-over-screen h1 {
+      font-size: 64px;
+      color: #ff4444;
+      text-shadow: 0 0 20px rgba(255,0,0,0.5);
+      margin-bottom: 20px;
+    }
+
+    #victory-screen {
+      background: rgba(0, 50, 0, 0.9);
+    }
+
+    #victory-screen h1 {
+      font-size: 64px;
+      color: #ffdd00;
+      text-shadow: 0 0 30px rgba(255,221,0,0.5);
+      margin-bottom: 20px;
+    }
+
+    #victory-screen p, #game-over-screen p {
+      font-size: 24px;
+      color: #fff;
+      margin-bottom: 30px;
+    }
+
+    #controls-hint {
+      position: absolute;
+      bottom: 80px;
+      left: 20px;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud">
+    <div id="hearts"></div>
+
+    <div id="power-bar-container">
+      <div id="power-bar-fill"></div>
+    </div>
+    <div id="power-label">LATIDO PRONTO! [E]</div>
+
+    <div id="boss-health-container">
+      <div id="boss-name"></div>
+      <div id="boss-health-bar">
+        <div id="boss-health-fill"></div>
+      </div>
+    </div>
+
+    <div id="damage-flash"></div>
+    <div id="level-transition"></div>
+
+    <div id="controls-hint">
+      WASD - Mover | Mouse - Camera | Espaco - Pular | E - Latido
+    </div>
+  </div>
+
+  <div id="menu-screen">
+    <h1>AMORA</h1>
+    <h2>A Aventura</h2>
+    <button class="menu-btn" id="start-btn">JOGAR</button>
+  </div>
+
+  <div id="game-over-screen">
+    <h1>GAME OVER</h1>
+    <p>Amora precisa de mais biscoitos...</p>
+    <button class="menu-btn" id="retry-btn">TENTAR DE NOVO</button>
+  </div>
+
+  <div id="victory-screen">
+    <h1>VITORIA!</h1>
+    <p>Amora derrotou todos os malvados!</p>
+    <button class="menu-btn" id="replay-btn">JOGAR DE NOVO</button>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
