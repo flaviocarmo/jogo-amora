@@ -12,6 +12,9 @@ import { HUD } from '../ui/HUD';
 import { createLevel1, type LevelData } from '../scenes/Level1';
 import { createLevel2 } from '../scenes/Level2';
 import { createLevel3 } from '../scenes/Level3';
+import { createLevel4 } from '../scenes/Level4';
+import { createLevel5 } from '../scenes/Level5';
+import { createLevel6 } from '../scenes/Level6';
 
 enum GameState {
   MENU,
@@ -104,7 +107,10 @@ export class Game {
     await this.physics.init(); // Reset physics world
     console.log('[GAME] physics re-initialized');
 
-    const levelNames = ['Prado Verde', 'Floresta Sombria', 'Montanha do Trovao'];
+    const levelNames = [
+      'Prado Verde', 'Floresta Sombria', 'Montanha do Trovao',
+      'Caverna Cristalina', 'Pantano Nebuloso', 'Castelo do Rei Porco',
+    ];
     await this.hud.showLevelTransition(levelNames[levelIndex] || 'Fase ???');
     console.log('[GAME] level transition shown');
 
@@ -115,6 +121,9 @@ export class Game {
       case 0: data = createLevel1(this.physics); break;
       case 1: data = createLevel2(this.physics); break;
       case 2: data = createLevel3(this.physics); break;
+      case 3: data = createLevel4(this.physics); break;
+      case 4: data = createLevel5(this.physics); break;
+      case 5: data = createLevel6(this.physics); break;
       default: data = createLevel1(this.physics);
     }
     console.log('[GAME] level created, enemies:', data.enemies.length, 'biscuits:', data.biscuits.length);
@@ -294,7 +303,7 @@ export class Game {
     const bossDefeated = this.levelData.boss ? !this.levelData.boss.alive : true;
     if (!bossDefeated) return;
 
-    if (this.currentLevel < 2) {
+    if (this.currentLevel < 5) {
       this.audio.playLevelComplete();
       this.currentLevel++;
       // Preserve player health across levels
