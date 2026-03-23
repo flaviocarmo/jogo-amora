@@ -1,9 +1,10 @@
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
 
 export class Entity {
-  mesh: TransformNode;
+  mesh!: TransformNode;
   body: PhysicsBody | null = null;
   health: number;
   maxHealth: number;
@@ -11,9 +12,15 @@ export class Entity {
   invincibleTimer = 0;
 
   constructor(maxHealth: number) {
-    this.mesh = new TransformNode('entity');
     this.maxHealth = maxHealth;
     this.health = maxHealth;
+    // NOTE: mesh is NOT created here — subclasses must create it
+    // when a Scene is available (e.g. in initPhysics or init(scene))
+  }
+
+  /** Call from subclass when scene is available */
+  protected initMesh(name: string, scene: Scene): void {
+    this.mesh = new TransformNode(name, scene);
   }
 
   get position(): Vector3 {

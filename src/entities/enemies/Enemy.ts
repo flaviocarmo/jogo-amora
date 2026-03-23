@@ -52,6 +52,9 @@ export class Enemy extends Entity {
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number, radius = 0.4) {
     this.scene = physics.scene;
 
+    // Create the root TransformNode now that we have a scene
+    this.initMesh('enemy', this.scene);
+
     // Build the visual model now that we have a scene
     this.buildModel(this.scene);
 

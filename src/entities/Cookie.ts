@@ -57,12 +57,14 @@ export class Cookie {
   private modelBuilt = false;
 
   constructor() {
-    this.mesh = new TransformNode('cookie');
+    // mesh is created lazily in init(scene) — no scene available yet
+    this.mesh = null as any;
   }
 
   /** Must be called once we have a scene reference, before first summon. */
   init(scene: Scene) {
     this.scene = scene;
+    this.mesh = new TransformNode('cookie', scene);
     this.buildModel(scene);
     this.mesh.setEnabled(false);
   }

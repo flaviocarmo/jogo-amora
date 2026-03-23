@@ -189,6 +189,7 @@ export class Player extends Entity {
 
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number) {
     this.scene = physics.scene;
+    this.initMesh('player', this.scene);
     this.buildModel(this.scene);
 
     this.mesh.position.set(x, y, z);
