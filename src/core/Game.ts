@@ -188,13 +188,9 @@ export class Game {
     this.killCount = 0;
     this.totalEnemies = data.enemies.length;
 
-    // Announce boss (if present)
-    if (data.boss) {
-      this.hud.showBossHealth(data.name, 1);
-      this.audio.playBossAppear();
-    } else {
-      this.hud.hideBossHealth();
-    }
+    // Hide boss health bar initially — it will show when the boss is in range
+    this.hud.hideBossHealth();
+    this.audio.bossAnnounced = false;
 
     // Sync HUD to player starting state
     this.hud.updateHearts(this.player.health, this.player.maxHealth);
@@ -340,10 +336,21 @@ export class Game {
     this.hud.updatePowerBar(this.player.powerPercent, this.player.isPowerReady);
     this.hud.updateSuperBar(this.player.superPercent, this.player.isSuperReady);
 
-    // Update boss health bar if a boss is present and alive
+    // Update boss health bar — only show when boss is alive and near the player
     if (this.levelData.boss && this.levelData.boss.alive) {
-      const bossHpPercent = this.levelData.boss.health / this.levelData.boss.maxHealth;
-      this.hud.showBossHealth(this.levelData.name, bossHpPercent);
+      const bossPos = this.levelData.boss.position;
+      const dist = Vector3.Distance(playerPos, bossPos);
+      if (dist < this.levelData.boss.detectionRadius * 1.5) {
+        const bossHpPercent = this.levelData.boss.health / this.levelData.boss.maxHealth;
+        const bossLabel = this.levelData.boss.bossName || this.levelData.name;
+        this.hud.showBossHealth(bossLabel, bossHpPercent);
+        if (!this.audio.bossAnnounced) {
+          this.audio.playBossAppear();
+          this.audio.bossAnnounced = true;
+        }
+      } else {
+        this.hud.hideBossHealth();
+      }
     } else if (this.levelData.boss && !this.levelData.boss.alive) {
       this.hud.hideBossHealth();
     }

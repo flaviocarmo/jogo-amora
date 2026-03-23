@@ -1,5 +1,6 @@
 export class AudioManager {
   private ctx: AudioContext | null = null;
+  bossAnnounced = false;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
