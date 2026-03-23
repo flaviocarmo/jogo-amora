@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm --version)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git status:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(npx vite:*)",
+      "Bash(gh repo:*)",
+      "Bash(where gh:*)",
+      "Bash(cmd /c \"where gh\")",
+      "Bash(npm search:*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//c/drive-d/projetos/jogo-amora/**)",
+      "Bash(done)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm uninstall:*)"
+    ]
+  }
+}
