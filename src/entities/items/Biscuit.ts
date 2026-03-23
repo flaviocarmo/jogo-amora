@@ -1,62 +1,68 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import * as C from '../../utils/colors';
+import { toonMat, hexColor } from '../../utils/materials';
 
 export class Biscuit {
-  mesh: THREE.Group;
+  mesh: TransformNode;
   collected = false;
   private spinSpeed = 2;
   private bobSpeed = 3;
   private bobHeight = 0.3;
   private baseY: number;
 
-  constructor(x: number, y: number, z: number) {
-    this.mesh = new THREE.Group();
+  constructor(x: number, y: number, z: number, scene: Scene) {
+    this.mesh = new TransformNode('biscuit', scene);
     this.baseY = y + 1;
 
-    // Biscuit shape (flattened cylinder with bumps)
-    const biscuitGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.08, 12);
-    const biscuitMat = new THREE.MeshToonMaterial({ color: C.BISCUIT_COLOR });
-    const biscuit = new THREE.Mesh(biscuitGeo, biscuitMat);
-    this.mesh.add(biscuit);
+    // Biscuit shape (flattened cylinder)
+    const biscuit = MeshBuilder.CreateCylinder(
+      'biscuitDisc',
+      { diameter: 0.6, height: 0.08, tessellation: 12 },
+      scene,
+    );
+    biscuit.material = toonMat('biscuitMat', C.BISCUIT_COLOR, scene);
+    biscuit.parent = this.mesh;
 
     // Chocolate chips
     for (let i = 0; i < 5; i++) {
-      const chipGeo = new THREE.SphereGeometry(0.04, 4, 4);
-      const chip = new THREE.Mesh(chipGeo, new THREE.MeshToonMaterial({ color: C.BISCUIT_DARK }));
+      const chip = MeshBuilder.CreateSphere(
+        `chip_${i}`,
+        { diameter: 0.08, segments: 4 },
+        scene,
+      );
+      chip.material = toonMat(`chipMat_${i}`, C.BISCUIT_DARK, scene);
       const angle = (i / 5) * Math.PI * 2 + Math.random();
       chip.position.set(
         Math.cos(angle) * 0.15,
         0.05,
-        Math.sin(angle) * 0.15
+        Math.sin(angle) * 0.15,
       );
-      this.mesh.add(chip);
+      chip.parent = this.mesh;
     }
 
-    // Glow ring
-    const glowGeo = new THREE.RingGeometry(0.35, 0.45, 16);
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xffdd88,
-      transparent: true,
-      opacity: 0.3,
-      side: THREE.DoubleSide,
-    });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.y = -0.1;
-    this.mesh.add(glow);
+    // Glow effect — replace RingGeometry with a PointLight
+    const glow = new PointLight('biscuitGlow', new Vector3(0, -0.1, 0), scene);
+    glow.diffuse = hexColor(0xffdd88);
+    glow.intensity = 0.5;
+    glow.range = 2;
+    glow.parent = this.mesh;
 
     this.mesh.position.set(x, this.baseY, z);
   }
 
-  update(dt: number) {
+  update(dt: number): void {
     if (this.collected) return;
     const t = performance.now() * 0.001;
     this.mesh.rotation.y += dt * this.spinSpeed;
     this.mesh.position.y = this.baseY + Math.sin(t * this.bobSpeed) * this.bobHeight;
   }
 
-  collect() {
+  collect(): void {
     this.collected = true;
-    this.mesh.visible = false;
+    this.mesh.setEnabled(false);
   }
 }

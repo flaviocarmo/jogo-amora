@@ -1,5 +1,8 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { randomRange } from '../utils/math';
+import { toonMat } from '../utils/materials';
 
 export interface RocksConfig {
   color: number;
@@ -9,29 +12,13 @@ export interface RocksConfig {
 }
 
 export class Rocks {
-  group: THREE.Group;
+  root: TransformNode;
 
-  constructor(config: RocksConfig) {
-    this.group = new THREE.Group();
-    // Use Standard material for better lighting interaction (PBR)
-    const mat = new THREE.MeshStandardMaterial({ 
-      color: config.color, 
-      roughness: 0.9, 
-      metalness: 0.1,
-      flatShading: true 
-    });
+  constructor(config: RocksConfig, scene: Scene) {
+    this.root = new TransformNode('rocks', scene);
+    const mat = toonMat('rockMat', config.color, scene);
 
     const half = config.areaSize / 2;
-    const baseGeo = new THREE.DodecahedronGeometry(1, 1);
-    
-    // Add noise to base geometry
-    const positions = baseGeo.attributes.position;
-    for (let j = 0; j < positions.count; j++) {
-      positions.setX(j, positions.getX(j) + randomRange(-0.2, 0.2));
-      positions.setY(j, positions.getY(j) + randomRange(-0.2, 0.2));
-      positions.setZ(j, positions.getZ(j) + randomRange(-0.2, 0.2));
-    }
-    baseGeo.computeVertexNormals();
 
     for (let i = 0; i < config.count; i++) {
       const x = randomRange(-half, half);
@@ -40,34 +27,39 @@ export class Rocks {
 
       const y = config.getHeight(x, z);
 
-      // Create a rock cluster instead of a single rock
-      const rockCluster = new THREE.Group();
+      const cluster = new TransformNode(`rockCluster_${i}`, scene);
+      cluster.position.set(x, y - 0.2, z);
+      cluster.parent = this.root;
+
       const numPieces = Math.floor(randomRange(1, 4));
-      
-      for(let p = 0; p < numPieces; p++) {
-        const rockPiece = new THREE.Mesh(baseGeo, mat);
-        rockPiece.position.set(
-          randomRange(-0.5, 0.5), 
-          randomRange(0, 0.5), 
-          randomRange(-0.5, 0.5)
+
+      for (let p = 0; p < numPieces; p++) {
+        // Low-poly sphere + flat shading to mimic DodecahedronGeometry look
+        const rock = MeshBuilder.CreateSphere(
+          `rock_${i}_${p}`,
+          { diameter: 2, segments: 2 }, // very low segments for angular look
+          scene,
         );
-        rockPiece.scale.set(
+        rock.convertToFlatShadedMesh();
+
+        rock.position.set(
+          randomRange(-0.5, 0.5),
+          randomRange(0, 0.5),
+          randomRange(-0.5, 0.5),
+        );
+        rock.scaling.set(
           randomRange(0.6, 1.5),
           randomRange(0.4, 1.2),
-          randomRange(0.6, 1.5)
+          randomRange(0.6, 1.5),
         );
-        rockPiece.rotation.set(
+        rock.rotation.set(
           Math.random() * Math.PI,
           Math.random() * Math.PI,
-          Math.random() * Math.PI
+          Math.random() * Math.PI,
         );
-        rockPiece.castShadow = true;
-        rockPiece.receiveShadow = true;
-        rockCluster.add(rockPiece);
+        rock.material = mat;
+        rock.parent = cluster;
       }
-
-      rockCluster.position.set(x, y - 0.2, z);
-      this.group.add(rockCluster);
     }
   }
 }

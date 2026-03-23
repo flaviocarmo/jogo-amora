@@ -1,5 +1,9 @@
-import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsShapeCapsule } from '@babylonjs/core/Physics/v2/physicsShape';
 import { Entity } from '../Entity';
 import { PhysicsWorld } from '../../core/PhysicsWorld';
 import { distanceXZ, angleBetween, randomRange } from '../../utils/math';
@@ -21,7 +25,9 @@ export class Enemy extends Entity {
   isBoss = false;
   bossName = '';
 
-  private patrolTarget = new THREE.Vector3();
+  protected scene: Scene | null = null;
+
+  private patrolTarget = new Vector3();
   private patrolTimer = 0;
   private spawnX: number;
   private spawnZ: number;
@@ -44,42 +50,59 @@ export class Enemy extends Entity {
   }
 
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number, radius = 0.4) {
-    const bodyDesc = physics.RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(x, y, z)
-      .setLinearDamping(3)
-      .lockRotations();
-    this.body = physics.createRigidBody(bodyDesc);
+    this.scene = physics.scene;
 
-    const colliderDesc = physics.RAPIER.ColliderDesc.capsule(0.3, radius)
-      .setFriction(0.5);
-    physics.createCollider(colliderDesc, this.body);
+    // Build the visual model now that we have a scene
+    this.buildModel(this.scene);
+
+    // Position the mesh at spawn
+    this.mesh.position.set(x, y, z);
+
+    // Create capsule physics shape
+    const shape = new PhysicsShapeCapsule(
+      new Vector3(0, 0.3, 0),   // pointA
+      new Vector3(0, -0.3, 0),  // pointB
+      radius,                    // radius
+      this.scene
+    );
+
+    this.body = new PhysicsBody(this.mesh, PhysicsMotionType.DYNAMIC, false, this.scene);
+    this.body.shape = shape;
+    this.body.setMassProperties({ mass: 1 });
+    this.body.setLinearDamping(3);
+    // Lock rotations by setting angular damping very high
+    this.body.setAngularDamping(1000);
   }
 
-  updateAI(dt: number, playerPos: THREE.Vector3) {
+  /** Override in subclasses to build the visual model. Called from initPhysics when scene is available. */
+  protected buildModel(_scene: Scene) {
+    // Base class does nothing — subclasses create geometry here
+  }
+
+  updateAI(dt: number, playerPos: Vector3) {
     super.update(dt);
     if (!this.body || !this.alive) {
       if (!this.alive) {
         this.deathTimer += dt;
         // Shrink and sink on death
         const s = Math.max(0, 1 - this.deathTimer * 2);
-        this.mesh.scale.setScalar(s);
+        this.mesh.scaling.setAll(s);
         this.mesh.position.y -= dt * 2;
       }
       return;
     }
 
-    const pos = this.body.translation();
+    const pos = this.mesh.position;
     const distToPlayer = distanceXZ(pos.x, pos.z, playerPos.x, playerPos.z);
 
     if (this.state === EnemyState.STUNNED) {
       this.stunnedTimer -= dt;
       // Visual: squished
-      this.mesh.scale.y = 0.5;
+      this.mesh.scaling.y = 0.5;
       if (this.stunnedTimer <= 0) {
         this.state = EnemyState.CHASE;
-        this.mesh.scale.y = 1;
+        this.mesh.scaling.y = 1;
       }
-      this.syncMeshToBody();
       return;
     }
 
@@ -111,13 +134,11 @@ export class Enemy extends Entity {
     if (this.state === EnemyState.CHASE) {
       this.mesh.rotation.y = angle;
     }
-
-    this.syncMeshToBody();
   }
 
-  private moveToward(tx: number, tz: number, speed: number, _dt: number) {
+  protected moveToward(tx: number, tz: number, speed: number, _dt: number) {
     if (!this.body) return;
-    const pos = this.body.translation();
+    const pos = this.mesh.position;
     const dx = tx - pos.x;
     const dz = tz - pos.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -125,12 +146,8 @@ export class Enemy extends Entity {
 
     const nx = dx / dist;
     const nz = dz / dist;
-    const vel = this.body.linvel();
-    this.body.setLinvel({
-      x: nx * speed,
-      y: vel.y,
-      z: nz * speed,
-    }, true);
+    const vel = this.body.getLinearVelocity();
+    this.body.setLinearVelocity(new Vector3(nx * speed, vel.y, nz * speed));
   }
 
   stun(duration = 1.0) {

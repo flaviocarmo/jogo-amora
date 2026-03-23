@@ -1,4 +1,12 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
@@ -8,6 +16,7 @@ import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import { randomRange } from '../utils/math';
 import type { LevelData } from './Level1';
 
@@ -19,167 +28,173 @@ import type { LevelData } from './Level1';
  */
 
 function createCastleWall(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   width: number, height: number, depth: number,
   rotation = 0
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const group = new TransformNode('castleWall', scene);
 
   // Main wall
-  const wallGeo = new THREE.BoxGeometry(width, height, depth);
-  const wall = new THREE.Mesh(wallGeo, toon(C.L6_CASTLE_WALL));
+  const wall = MeshBuilder.CreateBox('wall', { width, height, depth }, scene);
+  wall.material = toonMat('wallMat', C.L6_CASTLE_WALL, scene);
   wall.position.y = height / 2;
-  wall.castShadow = true;
-  wall.receiveShadow = true;
-  group.add(wall);
+  wall.receiveShadows = true;
+  wall.parent = group;
 
   // Battlements (crenellations)
   const merlonCount = Math.floor(width / 1.5);
   for (let i = 0; i < merlonCount; i++) {
-    const merlonGeo = new THREE.BoxGeometry(0.6, 0.6, depth + 0.1);
-    const merlon = new THREE.Mesh(merlonGeo, toon(C.L6_CASTLE_DARK));
+    const merlon = MeshBuilder.CreateBox(`merlon_${i}`, { width: 0.6, height: 0.6, depth: depth + 0.1 }, scene);
+    merlon.material = toonMat(`merlonMat_${i}`, C.L6_CASTLE_DARK, scene);
     merlon.position.set(
       -width / 2 + 0.75 + i * (width / merlonCount),
       height + 0.3,
-      0
+      0,
     );
-    group.add(merlon);
+    merlon.parent = group;
   }
 
   group.position.set(x, y, z);
   group.rotation.y = rotation;
-  scene.add(group);
 }
 
 function createTower(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   radius: number, height: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const group = new TransformNode('tower', scene);
 
   // Tower body
-  const bodyGeo = new THREE.CylinderGeometry(radius, radius * 1.1, height, 8);
-  const body = new THREE.Mesh(bodyGeo, toon(C.L6_CASTLE_WALL));
+  const body = MeshBuilder.CreateCylinder(
+    'towerBody',
+    { diameterTop: radius * 2, diameterBottom: radius * 1.1 * 2, height, tessellation: 8 },
+    scene,
+  );
+  body.material = toonMat('towerBodyMat', C.L6_CASTLE_WALL, scene);
   body.position.y = height / 2;
-  body.castShadow = true;
-  group.add(body);
+  body.parent = group;
 
   // Conical roof
-  const roofGeo = new THREE.ConeGeometry(radius * 1.3, height * 0.3, 8);
-  const roof = new THREE.Mesh(roofGeo, toon(C.L6_BANNER));
+  const roof = MeshBuilder.CreateCylinder(
+    'towerRoof',
+    { diameterTop: 0, diameterBottom: radius * 1.3 * 2, height: height * 0.3, tessellation: 8 },
+    scene,
+  );
+  roof.material = toonMat('towerRoofMat', C.L6_BANNER, scene);
   roof.position.y = height + height * 0.15;
-  group.add(roof);
+  roof.parent = group;
 
   // Torch on tower
-  const torchLight = new THREE.PointLight(C.L6_TORCH, 1.0, 12);
-  torchLight.position.set(radius + 0.2, height * 0.7, 0);
-  group.add(torchLight);
+  const torchLight = new PointLight('towerTorch', new Vector3(radius + 0.2, height * 0.7, 0), scene);
+  torchLight.diffuse = hexColor(C.L6_TORCH);
+  torchLight.intensity = 1.0;
+  torchLight.range = 12;
+  torchLight.parent = group;
 
   // Torch flame (small glowing sphere)
-  const flameGeo = new THREE.SphereGeometry(0.12, 4, 4);
-  const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: C.L6_TORCH }));
-  flame.position.copy(torchLight.position);
-  group.add(flame);
+  const flame = MeshBuilder.CreateSphere('towerFlame', { diameter: 0.12 * 2, segments: 4 }, scene);
+  flame.material = basicMat('towerFlameMat', C.L6_TORCH, scene);
+  flame.position.set(radius + 0.2, height * 0.7, 0);
+  flame.parent = group;
 
   group.position.set(x, y, z);
-  scene.add(group);
 }
 
 function createLavaPool(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   radius: number
 ) {
   // Lava disc
-  const lavaGeo = new THREE.CircleGeometry(radius, 10);
-  const lavaMat = new THREE.MeshBasicMaterial({
-    color: C.L6_LAVA,
-  });
-  const lava = new THREE.Mesh(lavaGeo, lavaMat);
-  lava.rotation.x = -Math.PI / 2;
+  const lava = MeshBuilder.CreateDisc('lavaPool', { radius, tessellation: 10 }, scene);
+  const lavaMat = new StandardMaterial('lavaPoolMat', scene);
+  lavaMat.emissiveColor = hexColor(C.L6_LAVA);
+  lavaMat.disableLighting = true;
+  lava.material = lavaMat;
+  lava.rotation.x = Math.PI / 2; // Lie flat
   lava.position.set(x, y + 0.05, z);
-  scene.add(lava);
 
   // Lava glow
-  const glow = new THREE.PointLight(C.L6_LAVA_GLOW, 0.8, 10);
-  glow.position.set(x, y + 0.5, z);
-  scene.add(glow);
+  const glow = new PointLight('lavaGlow', new Vector3(x, y + 0.5, z), scene);
+  glow.diffuse = hexColor(C.L6_LAVA_GLOW);
+  glow.intensity = 0.8;
+  glow.range = 10;
 }
 
 function createBanner(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   height: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const group = new TransformNode('banner', scene);
 
   // Pole
-  const poleGeo = new THREE.CylinderGeometry(0.03, 0.03, height, 4);
-  const pole = new THREE.Mesh(poleGeo, toon(0x888888));
+  const pole = MeshBuilder.CreateCylinder(
+    'bannerPole',
+    { diameterTop: 0.03 * 2, diameterBottom: 0.03 * 2, height, tessellation: 4 },
+    scene,
+  );
+  pole.material = toonMat('bannerPoleMat', 0x888888, scene);
   pole.position.y = height / 2;
-  group.add(pole);
+  pole.parent = group;
 
   // Banner cloth
-  const bannerGeo = new THREE.PlaneGeometry(0.8, height * 0.4);
-  const banner = new THREE.Mesh(bannerGeo, toon(C.L6_BANNER));
-  banner.position.set(0.45, height * 0.75, 0);
-  group.add(banner);
+  const bannerCloth = MeshBuilder.CreatePlane('bannerCloth', { width: 0.8, height: height * 0.4 }, scene);
+  bannerCloth.material = toonMat('bannerClothMat', C.L6_BANNER, scene);
+  bannerCloth.position.set(0.45, height * 0.75, 0);
+  bannerCloth.parent = group;
 
   // Pig skull emblem on banner
-  const skullGeo = new THREE.SphereGeometry(0.12, 5, 4);
-  const skull = new THREE.Mesh(skullGeo, toon(0xdddddd));
+  const skull = MeshBuilder.CreateSphere('bannerSkull', { diameter: 0.12 * 2, segments: 5 }, scene);
+  skull.material = toonMat('bannerSkullMat', 0xdddddd, scene);
   skull.position.set(0.45, height * 0.78, 0.02);
-  group.add(skull);
+  skull.parent = group;
 
   group.position.set(x, y, z);
-  scene.add(group);
 }
 
-export function createLevel6(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel6(scene: Scene, physics: PhysicsWorld): LevelData {
   // Hellish atmosphere
-  scene.fog = new THREE.Fog(C.L6_SKY_BOTTOM, 25, 80);
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogStart = 25;
+  scene.fogEnd = 80;
+  scene.fogColor = hexColor(C.L6_SKY_BOTTOM);
 
   // Skybox (red-black inferno)
-  const sky = new Skybox(C.L6_SKY_TOP, C.L6_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  new Skybox(C.L6_SKY_TOP, C.L6_SKY_BOTTOM, scene);
 
   // Lighting (warm/ominous from lava)
-  const ambientLight = new THREE.AmbientLight(0x442222, 0.3);
-  scene.add(ambientLight);
+  scene.ambientColor = new Color3(
+    ((0x442222 >> 16) & 0xff) / 255 * 0.3,
+    ((0x442222 >> 8) & 0xff) / 255 * 0.3,
+    (0x442222 & 0xff) / 255 * 0.3,
+  );
 
-  const dirLight = new THREE.DirectionalLight(0xff8844, 0.7);
-  dirLight.position.set(-10, 25, 10);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 120;
-  dirLight.shadow.camera.left = -50;
-  dirLight.shadow.camera.right = 50;
-  dirLight.shadow.camera.top = 50;
-  dirLight.shadow.camera.bottom = -50;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(10, -25, -10), scene);
+  dirLight.diffuse = hexColor(0xff8844);
+  dirLight.intensity = 0.7;
 
   // Red under-light for lava glow
-  const underLight = new THREE.HemisphereLight(0x442222, 0xff4400, 0.3);
-  scene.add(underLight);
+  const underLight = new HemisphericLight('underHemi', new Vector3(0, -1, 0), scene);
+  underLight.diffuse = hexColor(0x442222);
+  underLight.groundColor = hexColor(0xff4400);
+  underLight.intensity = 0.3;
 
   // Terrain (volcanic, rugged)
-  const terrain = new Terrain({
-    width: 110,
-    depth: 110,
-    segments: 55,
-    heightScale: 5,
-    color: C.L6_GROUND,
-    colorDark: C.L6_GROUND_DARK,
-    noiseScale: 0.04,
-  });
-  scene.add(terrain.mesh);
+  const terrain = new Terrain(
+    {
+      width: 110,
+      depth: 110,
+      segments: 55,
+      heightScale: 5,
+      color: C.L6_GROUND,
+      colorDark: C.L6_GROUND_DARK,
+      noiseScale: 0.04,
+    },
+    scene,
+  );
   terrain.initPhysics(physics);
 
   // Castle structure around boss area (center-back of map)
@@ -220,21 +235,25 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
   }
 
   // Dark volcanic rocks
-  const rocks = new Rocks({
-    color: 0x3a2a2a,
-    count: 45,
-    areaSize: 100,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  new Rocks(
+    {
+      color: 0x3a2a2a,
+      count: 45,
+      areaSize: 100,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
-  const obsidianRocks = new Rocks({
-    color: 0x1a1a1a,
-    count: 25,
-    areaSize: 100,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(obsidianRocks.group);
+  new Rocks(
+    {
+      color: 0x1a1a1a,
+      count: 25,
+      areaSize: 100,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
   // Enemies: 6 pigs (guards) + 5 rabbits (scouts) - maximum difficulty
   const enemies: Enemy[] = [];
@@ -247,7 +266,6 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -259,7 +277,6 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -268,7 +285,6 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Imperador Porco';
   const bossY = terrain.getHeightAt(0, 35) + 4;
   boss.initPhysics(physics, 0, bossY, 35, 1.2);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Torches around boss arena
@@ -278,14 +294,14 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
     const tz = 35 + Math.sin(angle) * 6;
     const ty = terrain.getHeightAt(tx, tz);
 
-    const torchLight = new THREE.PointLight(C.L6_TORCH, 1.2, 10);
-    torchLight.position.set(tx, ty + 3, tz);
-    scene.add(torchLight);
+    const torchLight = new PointLight(`arenaTorch_${i}`, new Vector3(tx, ty + 3, tz), scene);
+    torchLight.diffuse = hexColor(C.L6_TORCH);
+    torchLight.intensity = 1.2;
+    torchLight.range = 10;
 
-    const flameGeo = new THREE.SphereGeometry(0.15, 4, 4);
-    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: C.L6_TORCH }));
-    flame.position.copy(torchLight.position);
-    scene.add(flame);
+    const flame = MeshBuilder.CreateSphere(`arenaFlame_${i}`, { diameter: 0.15 * 2, segments: 4 }, scene);
+    flame.material = basicMat(`arengetFlameMat_${i}`, C.L6_TORCH, scene);
+    flame.position.set(tx, ty + 3, tz);
   }
 
   // Biscuits (very scarce in the castle!)
@@ -294,9 +310,7 @@ export function createLevel6(physics: PhysicsWorld): LevelData {
     const x = randomRange(-25, 25);
     const z = randomRange(-25, 20);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
-    biscuits.push(biscuit);
+    biscuits.push(new Biscuit(x, y, z, scene));
   }
 
   const spawnY = terrain.getHeightAt(0, -30) + 3;

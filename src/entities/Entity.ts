@@ -1,25 +1,24 @@
-import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
 
 export class Entity {
-  mesh: THREE.Group;
-  body: RAPIER.RigidBody | null = null;
+  mesh: TransformNode;
+  body: PhysicsBody | null = null;
   health: number;
   maxHealth: number;
   alive = true;
   invincibleTimer = 0;
 
   constructor(maxHealth: number) {
-    this.mesh = new THREE.Group();
+    this.mesh = new TransformNode('entity');
     this.maxHealth = maxHealth;
     this.health = maxHealth;
   }
 
-  get position(): THREE.Vector3 {
-    if (this.body) {
-      const t = this.body.translation();
-      return new THREE.Vector3(t.x, t.y, t.z);
-    }
+  get position(): Vector3 {
+    // In Babylon.js + Havok, the physics body is attached to the TransformNode.
+    // The mesh position is automatically synced by Havok.
     return this.mesh.position.clone();
   }
 
@@ -37,19 +36,24 @@ export class Entity {
   }
 
   syncMeshToBody() {
+    // In Babylon.js + Havok, physics bodies are attached directly to TransformNodes,
+    // so the sync is automatic. This method is kept for API compatibility.
+    // If a subclass uses a separate physics node, override this method.
     if (this.body) {
-      const t = this.body.translation();
-      this.mesh.position.set(t.x, t.y - 0.5, t.z);
+      const physNode = this.body.transformNode;
+      if (physNode !== this.mesh) {
+        this.mesh.position.copyFrom(physNode.position);
+      }
     }
   }
 
   update(_dt: number) {
     if (this.invincibleTimer > 0) {
       this.invincibleTimer -= _dt;
-      // Blink effect
-      this.mesh.visible = Math.floor(this.invincibleTimer * 10) % 2 === 0;
+      // Blink effect — setEnabled hides the node and all children
+      this.mesh.setEnabled(Math.floor(this.invincibleTimer * 10) % 2 === 0);
     } else {
-      this.mesh.visible = true;
+      this.mesh.setEnabled(true);
     }
   }
 }

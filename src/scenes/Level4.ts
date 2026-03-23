@@ -1,4 +1,10 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
@@ -8,6 +14,7 @@ import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
+import { toonMat, hexColor } from '../utils/materials';
 import { randomRange } from '../utils/math';
 import type { LevelData } from './Level1';
 
@@ -19,109 +26,123 @@ import type { LevelData } from './Level1';
  */
 
 function createCrystal(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   color: number, scale: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const group = new TransformNode('crystal', scene);
 
   // Main crystal shard
-  const geo = new THREE.ConeGeometry(0.3 * scale, 1.5 * scale, 5);
-  const mesh = new THREE.Mesh(geo, toon(color));
+  const mesh = MeshBuilder.CreateCylinder(
+    'crystalMain',
+    { diameterTop: 0, diameterBottom: 0.3 * scale * 2, height: 1.5 * scale, tessellation: 5 },
+    scene,
+  );
+  mesh.material = toonMat('crystalMat', color, scene);
   mesh.position.y = 0.75 * scale;
-  mesh.castShadow = true;
-  group.add(mesh);
+  mesh.parent = group;
 
   // Smaller side crystals
   for (let i = 0; i < 3; i++) {
-    const sGeo = new THREE.ConeGeometry(0.15 * scale, 0.7 * scale, 4);
-    const sMesh = new THREE.Mesh(sGeo, toon(color));
+    const sMesh = MeshBuilder.CreateCylinder(
+      `crystalSide_${i}`,
+      { diameterTop: 0, diameterBottom: 0.15 * scale * 2, height: 0.7 * scale, tessellation: 4 },
+      scene,
+    );
+    sMesh.material = toonMat(`crystalSideMat_${i}`, color, scene);
     const angle = (i / 3) * Math.PI * 2 + Math.random();
     sMesh.position.set(
       Math.cos(angle) * 0.25 * scale,
       0.35 * scale,
-      Math.sin(angle) * 0.25 * scale
+      Math.sin(angle) * 0.25 * scale,
     );
     sMesh.rotation.z = (Math.random() - 0.5) * 0.5;
-    group.add(sMesh);
+    sMesh.parent = group;
   }
 
   // Glow point light
-  const glow = new THREE.PointLight(color, 0.6, 8);
-  glow.position.y = 1.0 * scale;
-  group.add(glow);
+  const glow = new PointLight('crystalGlow', new Vector3(0, 1.0 * scale, 0), scene);
+  glow.diffuse = hexColor(color);
+  glow.intensity = 0.6;
+  glow.range = 8;
+  glow.parent = group;
 
   group.position.set(x, y, z);
-  scene.add(group);
 }
 
 function createGlowMushroom(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   scale: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const group = new TransformNode('mushroom', scene);
 
   // Stem
-  const stemGeo = new THREE.CylinderGeometry(0.06 * scale, 0.08 * scale, 0.4 * scale, 5);
-  const stem = new THREE.Mesh(stemGeo, toon(0xccccaa));
+  const stem = MeshBuilder.CreateCylinder(
+    'mushroomStem',
+    { diameterTop: 0.06 * scale * 2, diameterBottom: 0.08 * scale * 2, height: 0.4 * scale, tessellation: 5 },
+    scene,
+  );
+  stem.material = toonMat('mushroomStemMat', 0xccccaa, scene);
   stem.position.y = 0.2 * scale;
-  group.add(stem);
+  stem.parent = group;
 
-  // Cap
-  const capGeo = new THREE.SphereGeometry(0.2 * scale, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  const cap = new THREE.Mesh(capGeo, toon(C.L4_MUSHROOM));
+  // Cap (hemisphere via sphere with top half)
+  const cap = MeshBuilder.CreateSphere(
+    'mushroomCap',
+    { diameter: 0.2 * scale * 2, segments: 6 },
+    scene,
+  );
+  cap.material = toonMat('mushroomCapMat', C.L4_MUSHROOM, scene);
   cap.position.y = 0.4 * scale;
-  group.add(cap);
+  // Scale Y to make it a hemisphere-like shape
+  cap.scaling.y = 0.5;
+  cap.parent = group;
 
   // Glow
-  const glow = new THREE.PointLight(C.L4_MUSHROOM_GLOW, 0.3, 4);
-  glow.position.y = 0.5 * scale;
-  group.add(glow);
+  const glow = new PointLight('mushroomGlow', new Vector3(0, 0.5 * scale, 0), scene);
+  glow.diffuse = hexColor(C.L4_MUSHROOM_GLOW);
+  glow.intensity = 0.3;
+  glow.range = 4;
+  glow.parent = group;
 
   group.position.set(x, y, z);
-  scene.add(group);
 }
 
-export function createLevel4(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel4(scene: Scene, physics: PhysicsWorld): LevelData {
   // Dark cave atmosphere
-  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.025);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.025;
+  scene.fogColor = hexColor(0x0a0a1a);
 
   // Skybox (dark cave ceiling)
-  const sky = new Skybox(C.L4_SKY_TOP, C.L4_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  new Skybox(C.L4_SKY_TOP, C.L4_SKY_BOTTOM, scene);
 
   // Dim ambient - cave is dark!
-  const ambientLight = new THREE.AmbientLight(0x222244, 0.25);
-  scene.add(ambientLight);
+  scene.ambientColor = new Color3(
+    ((0x222244 >> 16) & 0xff) / 255 * 0.25,
+    ((0x222244 >> 8) & 0xff) / 255 * 0.25,
+    (0x222244 & 0xff) / 255 * 0.25,
+  );
 
   // Subtle directional (cracks in ceiling)
-  const dirLight = new THREE.DirectionalLight(0x6688aa, 0.4);
-  dirLight.position.set(5, 25, 5);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 80;
-  dirLight.shadow.camera.left = -40;
-  dirLight.shadow.camera.right = 40;
-  dirLight.shadow.camera.top = 40;
-  dirLight.shadow.camera.bottom = -40;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(-5, -25, -5), scene);
+  dirLight.diffuse = hexColor(0x6688aa);
+  dirLight.intensity = 0.4;
 
   // Terrain (cave floor, relatively flat with some bumps)
-  const terrain = new Terrain({
-    width: 85,
-    depth: 85,
-    segments: 42,
-    heightScale: 2.5,
-    color: C.L4_GROUND,
-    colorDark: C.L4_GROUND_DARK,
-    noiseScale: 0.06,
-  });
-  scene.add(terrain.mesh);
+  const terrain = new Terrain(
+    {
+      width: 85,
+      depth: 85,
+      segments: 42,
+      heightScale: 2.5,
+      color: C.L4_GROUND,
+      colorDark: C.L4_GROUND_DARK,
+      noiseScale: 0.06,
+    },
+    scene,
+  );
   terrain.initPhysics(physics);
 
   // Crystal formations scattered around
@@ -144,36 +165,43 @@ export function createLevel4(physics: PhysicsWorld): LevelData {
   }
 
   // Dark cave rocks - many!
-  const rocks = new Rocks({
-    color: C.L4_ROCK,
-    count: 40,
-    areaSize: 75,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  new Rocks(
+    {
+      color: C.L4_ROCK,
+      count: 40,
+      areaSize: 75,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
-  const darkRocks = new Rocks({
-    color: C.L4_ROCK_DARK,
-    count: 30,
-    areaSize: 75,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(darkRocks.group);
+  new Rocks(
+    {
+      color: C.L4_ROCK_DARK,
+      count: 30,
+      areaSize: 75,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
   // Stalactites (hanging rocks from ceiling)
   for (let i = 0; i < 15; i++) {
     const x = randomRange(-35, 35);
     const z = randomRange(-35, 35);
-    const geo = new THREE.ConeGeometry(
-      randomRange(0.2, 0.5),
-      randomRange(1, 3),
-      5
+    const stalactite = MeshBuilder.CreateCylinder(
+      `stalactite_${i}`,
+      {
+        diameterTop: 0,
+        diameterBottom: randomRange(0.2, 0.5) * 2,
+        height: randomRange(1, 3),
+        tessellation: 5,
+      },
+      scene,
     );
-    const mat = new THREE.MeshToonMaterial({ color: C.L4_ROCK_DARK });
-    const stalactite = new THREE.Mesh(geo, mat);
+    stalactite.material = toonMat(`stalactiteMat_${i}`, C.L4_ROCK_DARK, scene);
     stalactite.position.set(x, randomRange(12, 18), z);
     stalactite.rotation.x = Math.PI; // Point downward
-    scene.add(stalactite);
   }
 
   // Enemies: 5 fast rabbits + 3 pigs (tougher in the dark)
@@ -186,7 +214,6 @@ export function createLevel4(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -197,7 +224,6 @@ export function createLevel4(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -206,7 +232,6 @@ export function createLevel4(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Coelho Cristalino';
   const bossY = terrain.getHeightAt(32, 32) + 3;
   boss.initPhysics(physics, 32, bossY, 32, 0.9);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Crystal glow around boss area
@@ -224,9 +249,7 @@ export function createLevel4(physics: PhysicsWorld): LevelData {
     const x = randomRange(-30, 30);
     const z = randomRange(-30, 30);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
-    biscuits.push(biscuit);
+    biscuits.push(new Biscuit(x, y, z, scene));
   }
 
   const spawnY = terrain.getHeightAt(0, 0) + 3;

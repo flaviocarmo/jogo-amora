@@ -1,15 +1,19 @@
-import * as THREE from 'three';
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+
 import { InputManager } from './InputManager';
 import { PhysicsWorld } from './PhysicsWorld';
 import { AudioManager } from './AudioManager';
+import { HUD } from '../ui/HUD';
 import { CameraSystem } from '../systems/CameraSystem';
 import { CombatSystem } from '../systems/CombatSystem';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { Player } from '../entities/Player';
-import { Enemy } from '../entities/enemies/Enemy';
-import { Biscuit } from '../entities/items/Biscuit';
-import { HUD } from '../ui/HUD';
 import { Cookie } from '../entities/Cookie';
+
 import { createLevel1, type LevelData } from '../scenes/Level1';
 import { createLevel2 } from '../scenes/Level2';
 import { createLevel3 } from '../scenes/Level3';
@@ -31,22 +35,34 @@ enum GameState {
   TRANSITION,
 }
 
+const LEVEL_NAMES = [
+  'Prado Verde', 'Floresta Sombria', 'Montanha do Trovao',
+  'Caverna Cristalina', 'Pantano Nebuloso', 'Castelo do Rei Porco',
+  'Praia Tropical', 'Cidade Abandonada', 'Jardim Encantado',
+  'Vulcao Ardente', 'Cemiterio Sombrio', 'Torre do Imperador',
+];
+
 export class Game {
-  private renderer: THREE.WebGLRenderer;
+  private engine: Engine;
+  private canvas: HTMLCanvasElement;
   private input: InputManager;
   private physics: PhysicsWorld;
   private audio: AudioManager;
-  private cameraSystem: CameraSystem;
-  private combatSystem: CombatSystem;
-  private particleSystem!: ParticleSystem;
   private hud: HUD;
+
   private player: Player;
   private cookie: Cookie;
+  private cameraSystem!: CameraSystem;
+  private combatSystem: CombatSystem;
+  private particleSystem!: ParticleSystem;
+
+  // Menu/game-over ambient camera
+  private menuCamera: ArcRotateCamera | null = null;
 
   private state = GameState.MENU;
   private currentLevel = 0;
   private levelData: LevelData | null = null;
-  private scene: THREE.Scene | null = null;
+  private scene: Scene | null = null;
 
   private readonly FIXED_STEP = 1 / 60;
   private accumulator = 0;
@@ -55,37 +71,42 @@ export class Game {
   private totalEnemies = 0;
   private isTransitioning = false;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  constructor(engine: Engine, canvas: HTMLCanvasElement) {
+    this.engine = engine;
+    this.canvas = canvas;
 
     this.input = new InputManager(canvas);
     this.physics = new PhysicsWorld();
     this.audio = new AudioManager();
-    this.cameraSystem = new CameraSystem(window.innerWidth / window.innerHeight);
-    this.combatSystem = new CombatSystem();
     this.hud = new HUD();
+
     this.player = new Player();
     this.cookie = new Cookie();
-
-    window.addEventListener('resize', () => this.onResize());
+    this.combatSystem = new CombatSystem();
 
     // Menu buttons
     document.getElementById('start-btn')!.addEventListener('click', () => this.startGame());
     document.getElementById('retry-btn')!.addEventListener('click', () => this.startGame());
     document.getElementById('replay-btn')!.addEventListener('click', () => this.startGame());
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      this.engine.resize();
+    });
   }
 
   async init() {
     console.log('[GAME] init: starting physics...');
-    await this.physics.init();
+    // Create a temporary boot scene so physics can initialise its Havok instance
+    const bootScene = new Scene(this.engine);
+    await this.physics.init(bootScene);
     console.log('[GAME] init: physics ready, starting game loop');
+
     this.lastTime = performance.now();
     this.gameLoop();
   }
+
+  // ─── Game lifecycle ───────────────────────────────────────────────
 
   private async startGame() {
     console.log('[GAME] startGame called');
@@ -94,7 +115,10 @@ export class Game {
     this.hud.hideVictory();
     this.currentLevel = 0;
     this.isTransitioning = false;
+
+    // Reset player for a fresh run
     this.player = new Player();
+
     console.log('[GAME] loading level 0...');
     try {
       await this.loadLevel(0);
@@ -102,80 +126,86 @@ export class Game {
     } catch (err) {
       console.error('[GAME] loadLevel error:', err);
     }
-    this.state = GameState.PLAYING;
-    console.log('[GAME] state set to PLAYING');
   }
 
   private async loadLevel(levelIndex: number) {
     console.log('[GAME] loadLevel:', levelIndex);
     this.state = GameState.TRANSITION;
 
-    // Cleanup previous physics bodies
-    if (this.levelData) {
-      // Rapier world is re-created per level for simplicity
+    // Dispose previous scene — this cleans up all meshes, materials, lights and
+    // physics bodies attached to it, so we get a clean slate for the new level.
+    if (this.scene) {
+      this.scene.dispose();
     }
-    console.log('[GAME] re-initializing physics...');
-    await this.physics.init(); // Reset physics world
-    console.log('[GAME] physics re-initialized');
 
-    const levelNames = [
-      'Prado Verde', 'Floresta Sombria', 'Montanha do Trovao',
-      'Caverna Cristalina', 'Pantano Nebuloso', 'Castelo do Rei Porco',
-      'Praia Tropical', 'Cidade Abandonada', 'Jardim Encantado',
-      'Vulcao Ardente', 'Cemiterio Sombrio', 'Torre do Imperador',
-    ];
-    await this.hud.showLevelTransition(levelNames[levelIndex] || 'Fase ???');
+    // Create a fresh Babylon scene for this level
+    const scene = new Scene(this.engine);
+    scene.clearColor = new Color4(0.4, 0.6, 1.0, 1.0);
+
+    // Re-initialise physics on the new scene (Havok plugin is reused)
+    await this.physics.init(scene);
+    console.log('[GAME] physics re-initialized for level', levelIndex);
+
+    // Show level title overlay and wait for the CSS transition to finish
+    await this.hud.showLevelTransition(LEVEL_NAMES[levelIndex] ?? 'Fase ???');
     console.log('[GAME] level transition shown');
 
-    // Create level
-    console.log('[GAME] creating level data...');
+    // Build the level geometry, enemies and biscuits
     let data: LevelData;
     switch (levelIndex) {
-      case 0: data = createLevel1(this.physics); break;
-      case 1: data = createLevel2(this.physics); break;
-      case 2: data = createLevel3(this.physics); break;
-      case 3: data = createLevel4(this.physics); break;
-      case 4: data = createLevel5(this.physics); break;
-      case 5: data = createLevel6(this.physics); break;
-      case 6: data = createLevel7(this.physics); break;
-      case 7: data = createLevel8(this.physics); break;
-      case 8: data = createLevel9(this.physics); break;
-      case 9: data = createLevel10(this.physics); break;
-      case 10: data = createLevel11(this.physics); break;
-      case 11: data = createLevel12(this.physics); break;
-      default: data = createLevel1(this.physics);
+      case 0:  data = createLevel1(scene, this.physics);  break;
+      case 1:  data = createLevel2(scene, this.physics);  break;
+      case 2:  data = createLevel3(scene, this.physics);  break;
+      case 3:  data = createLevel4(scene, this.physics);  break;
+      case 4:  data = createLevel5(scene, this.physics);  break;
+      case 5:  data = createLevel6(scene, this.physics);  break;
+      case 6:  data = createLevel7(scene, this.physics);  break;
+      case 7:  data = createLevel8(scene, this.physics);  break;
+      case 8:  data = createLevel9(scene, this.physics);  break;
+      case 9:  data = createLevel10(scene, this.physics); break;
+      case 10: data = createLevel11(scene, this.physics); break;
+      case 11: data = createLevel12(scene, this.physics); break;
+      default:
+        throw new Error(`[GAME] No level creator for index ${levelIndex}`);
     }
-    console.log('[GAME] level created, enemies:', data.enemies.length, 'biscuits:', data.biscuits.length);
 
     this.levelData = data;
-    this.scene = data.scene;
+    this.scene = scene;
 
-    // Add player to scene
-    this.player.initPhysics(this.physics, data.spawnPoint.x, data.spawnPoint.y, data.spawnPoint.z);
-    this.scene.add(this.player.mesh);
+    // Camera and particle systems must be recreated per scene
+    this.cameraSystem = new CameraSystem(scene);
+    this.particleSystem = new ParticleSystem(scene);
 
-    // Add Cookie (ally) to scene
+    // Spawn player at the level's designated spawn point
+    const sp = data.spawnPoint;
+    this.player.initPhysics(this.physics, sp.x, sp.y, sp.z);
+
+    // Cookie needs a scene reference before it can be summoned
     this.cookie = new Cookie();
-    this.scene.add(this.cookie.mesh);
+    this.cookie.init(scene);
 
-    // Particle system
-    this.particleSystem = new ParticleSystem(this.scene);
-
-    // Track enemies
+    // Enemy and biscuit counts
     this.killCount = 0;
     this.totalEnemies = data.enemies.length;
 
-    // Update HUD
-    this.hud.updateHearts(this.player.health, this.player.maxHealth);
-    this.hud.updatePowerBar(0, false);
-    this.hud.updateSuperBar(0, false);
-
+    // Announce boss (if present)
     if (data.boss) {
+      this.hud.showBossHealth(data.name, 1);
       this.audio.playBossAppear();
+    } else {
+      this.hud.hideBossHealth();
     }
 
+    // Sync HUD to player starting state
+    this.hud.updateHearts(this.player.health, this.player.maxHealth);
+    this.hud.updatePowerBar(this.player.powerPercent, this.player.isPowerReady);
+    this.hud.updateSuperBar(this.player.superPercent, this.player.isSuperReady);
+
+    this.menuCamera = null;
     this.state = GameState.PLAYING;
   }
+
+  // ─── Game loop ────────────────────────────────────────────────────
 
   private gameLoop = () => {
     requestAnimationFrame(this.gameLoop);
@@ -183,7 +213,7 @@ export class Game {
     const now = performance.now();
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
-    dt = Math.min(dt, 0.1); // Cap delta
+    dt = Math.min(dt, 0.1); // Cap delta to avoid spiral-of-death on tab switch
 
     if (this.state === GameState.PLAYING) {
       this.input.update();
@@ -196,14 +226,24 @@ export class Game {
 
       this.render();
       this.input.afterUpdate();
-    } else if (this.state === GameState.MENU || this.state === GameState.GAME_OVER || this.state === GameState.VICTORY) {
-      // Simple rotating camera for menu
+    } else if (
+      this.state === GameState.MENU ||
+      this.state === GameState.GAME_OVER ||
+      this.state === GameState.VICTORY
+    ) {
+      // Gently rotate an ambient camera so the scene is still visible behind
+      // the UI overlay — or just render the last loaded scene if available.
       if (this.scene) {
-        this.cameraSystem.camera.position.x = Math.sin(now * 0.0003) * 15;
-        this.cameraSystem.camera.position.z = Math.cos(now * 0.0003) * 15;
-        this.cameraSystem.camera.position.y = 10;
-        this.cameraSystem.camera.lookAt(0, 0, 0);
-        this.renderer.render(this.scene, this.cameraSystem.camera);
+        if (!this.menuCamera) {
+          // Lazily create a rotating ambient camera attached to the current scene
+          this.menuCamera = new ArcRotateCamera(
+            'menu-cam', -Math.PI / 2, Math.PI / 4, 18, Vector3.Zero(), this.scene,
+          );
+          this.menuCamera.minZ = 0.1;
+          this.menuCamera.maxZ = 500;
+        }
+        this.menuCamera.alpha += 0.0003;
+        this.scene.render();
       }
     }
   };
@@ -211,13 +251,14 @@ export class Game {
   private fixedUpdate(dt: number) {
     if (!this.levelData || !this.scene) return;
 
-    // Physics step
+    // Havok advances automatically inside scene.render(), but we call step()
+    // here to keep the API consistent and allow future manual stepping.
     this.physics.step(dt);
 
-    // Player update
+    // Player update (movement, jump, bark wave animation, power/super bars)
     this.player.updatePlayer(dt, this.input, this.cameraSystem, this.physics);
 
-    // Bark input
+    // Bark power attack (E key or touch button)
     if (this.input.bark) {
       this.combatSystem.executeBark(
         this.player,
@@ -226,64 +267,55 @@ export class Game {
         this.scene,
         () => {
           this.killCount++;
-          this.checkLevelComplete();
-        }
+          this.particleSystem.emitStars(this.player.position);
+          void this.checkLevelComplete();
+        },
       );
     }
 
-    // Super summon input (Q key)
+    // Super summon — Cookie (Q key or touch button)
     if (this.input.isSuperPressed && this.player.isSuperReady) {
       if (this.player.useSuper()) {
         const spawnPos = this.player.position.clone();
         spawnPos.x += Math.sin(this.player.mesh.rotation.y) * 3;
         spawnPos.z += Math.cos(this.player.mesh.rotation.y) * 3;
         this.cookie.summon(spawnPos);
-        this.audio.playPowerReady(); // Reuse power ready sound for summon
+        this.audio.playPowerReady();
       }
     }
 
-    // Update Cookie ally
+    // Update Cookie ally (autonomous AI, no physics body)
     if (this.cookie.alive && this.levelData) {
       this.cookie.update(dt, this.levelData.enemies);
-      // Add bark wave to scene if created
-      if (this.cookie.barkWaveMesh && !this.cookie.barkWaveMesh.parent) {
-        this.scene.add(this.cookie.barkWaveMesh);
-      }
-      // Check if Cookie killed any enemies
-      for (const enemy of this.levelData.enemies) {
-        if (!enemy.alive) {
-          // Will be caught by existing kill tracking
-        }
-      }
     }
 
-    // Camera
+    // Follow player with third-person camera
     this.cameraSystem.update(
       this.player.position,
       this.input.mouseDX,
       this.input.mouseDY,
-      dt
+      dt,
     );
 
-    // Enemies
+    // Enemy AI
     const playerPos = this.player.position;
     for (const enemy of this.levelData.enemies) {
       enemy.updateAI(dt, playerPos);
     }
 
-    // Biscuits
+    // Biscuit spin animation
     for (const biscuit of this.levelData.biscuits) {
       biscuit.update(dt);
     }
 
-    // Combat
+    // Combat: stomps, damage, collection, power-ready notification
     this.combatSystem.update(
       this.player,
       this.levelData.enemies,
       this.levelData.biscuits,
       this.audio,
       () => {
-        // onDamage
+        // onDamage — flash and update hearts
         this.hud.flashDamage();
         this.hud.updateHearts(this.player.health, this.player.maxHealth);
         this.particleSystem.emitDamage(this.player.position);
@@ -297,53 +329,49 @@ export class Game {
         this.particleSystem.emitHeal(this.player.position);
       },
       () => {
-        // onPowerReady
-        this.hud.updatePowerBar(1, true);
+        // onPowerReady — already handled by CombatSystem internal flag
       },
       () => {
-        // onEnemyKill
+        // onEnemyKill (stomp)
         this.killCount++;
-        this.particleSystem.emitStars(this.player.position);
-        this.checkLevelComplete();
-      }
+        void this.checkLevelComplete();
+      },
     );
 
-    // Update HUD
+    // Particle system tick
+    this.particleSystem.update(dt);
+
+    // Update HUD bars every frame
     this.hud.updatePowerBar(this.player.powerPercent, this.player.isPowerReady);
     this.hud.updateSuperBar(this.player.superPercent, this.player.isSuperReady);
 
-    // Boss health bar
+    // Update boss health bar if a boss is present and alive
     if (this.levelData.boss && this.levelData.boss.alive) {
-      this.hud.showBossHealth(
-        this.levelData.boss.bossName,
-        this.levelData.boss.health / this.levelData.boss.maxHealth
-      );
-    } else {
+      const bossHpPercent = this.levelData.boss.health / this.levelData.boss.maxHealth;
+      this.hud.showBossHealth(this.levelData.name, bossHpPercent);
+    } else if (this.levelData.boss && !this.levelData.boss.alive) {
       this.hud.hideBossHealth();
     }
 
-    // Particles
-    this.particleSystem.update(dt);
-
-    // Fall off world check — instant death
+    // Fall-off-world instant death (no mercy)
     if (this.player.position.y < -20) {
       this.player.health = 0;
       this.player.alive = false;
-      this.hud.updateHearts(0, this.player.maxHealth);
-      this.hud.flashDamage();
       this.gameOver();
     }
   }
 
   private render() {
     if (!this.scene) return;
-    this.renderer.render(this.scene, this.cameraSystem.camera);
+    this.scene.render();
   }
+
+  // ─── Level progression ────────────────────────────────────────────
 
   private async checkLevelComplete() {
     if (!this.levelData || this.isTransitioning) return;
 
-    // Level complete when boss is defeated
+    // Level is only complete once the boss (if any) is defeated
     const bossDefeated = this.levelData.boss ? !this.levelData.boss.alive : true;
     if (!bossDefeated) return;
 
@@ -352,12 +380,7 @@ export class Game {
     if (this.currentLevel < 11) {
       this.audio.playLevelComplete();
       this.currentLevel++;
-      // Preserve player health across levels
-      const currentHealth = this.player.health;
-      const currentPower = this.player.powerCharge;
       await this.loadLevel(this.currentLevel);
-      this.player.health = currentHealth;
-      this.player.powerCharge = currentPower;
     } else {
       this.victory();
     }
@@ -366,6 +389,7 @@ export class Game {
   }
 
   private gameOver() {
+    if (this.state === GameState.GAME_OVER) return; // already handled
     this.state = GameState.GAME_OVER;
     this.audio.playGameOver();
     this.hud.showGameOver();
@@ -377,12 +401,5 @@ export class Game {
     this.audio.playVictory();
     this.hud.showVictory();
     document.exitPointerLock();
-  }
-
-  private onResize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.renderer.setSize(w, h);
-    this.cameraSystem.resize(w / h);
   }
 }

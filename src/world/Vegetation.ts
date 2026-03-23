@@ -1,5 +1,9 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { randomRange } from '../utils/math';
+import { toonMat } from '../utils/materials';
 
 export interface VegetationConfig {
   trunkColor: number;
@@ -13,14 +17,14 @@ export interface VegetationConfig {
 }
 
 export class Vegetation {
-  group: THREE.Group;
+  root: TransformNode;
 
-  constructor(config: VegetationConfig) {
-    this.group = new THREE.Group();
+  constructor(config: VegetationConfig, scene: Scene) {
+    this.root = new TransformNode('vegetation', scene);
     const type = config.treeType || 'oak';
 
-    const trunkMat = new THREE.MeshStandardMaterial({ color: config.trunkColor, roughness: 1.0 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: config.leavesColor, roughness: 0.8 });
+    const trunkMaterial = toonMat('trunkMat', config.trunkColor, scene);
+    const leafMaterial = toonMat('leafMat', config.leavesColor, scene);
 
     const half = config.areaSize / 2;
     const minS = config.minScale ?? 0.8;
@@ -34,73 +38,84 @@ export class Vegetation {
       const y = config.getHeight(x, z);
       const scale = randomRange(minS, maxS);
 
-      const tree = new THREE.Group();
+      const tree = new TransformNode(`tree_${i}`, scene);
       tree.position.set(x, y, z);
-      tree.scale.setScalar(scale);
+      tree.scaling.setAll(scale);
       tree.rotation.y = Math.random() * Math.PI * 2;
+      tree.parent = this.root;
 
-      // Organic Trunk
-      const trunkGeo = new THREE.CylinderGeometry(0.15, 0.3, 2.5, 7, 3);
-      const trunkPositions = trunkGeo.attributes.position;
-      for (let j = 0; j < trunkPositions.count; j++) {
-        if (trunkPositions.getY(j) > 0) {
-           trunkPositions.setX(j, trunkPositions.getX(j) + (Math.random()-0.5)*0.2);
-           trunkPositions.setZ(j, trunkPositions.getZ(j) + (Math.random()-0.5)*0.2);
+      // --- Organic Trunk ---
+      const trunk = MeshBuilder.CreateCylinder(
+        `trunk_${i}`,
+        { diameterTop: 0.3, diameterBottom: 0.6, height: 2.5, tessellation: 7, subdivisions: 3, updatable: true },
+        scene,
+      );
+      // Wobble upper vertices for organic feel
+      const trunkPos = trunk.getVerticesData(VertexBuffer.PositionKind)!;
+      for (let j = 0; j < trunkPos.length / 3; j++) {
+        if (trunkPos[j * 3 + 1] > 0) {
+          trunkPos[j * 3] += (Math.random() - 0.5) * 0.2;
+          trunkPos[j * 3 + 2] += (Math.random() - 0.5) * 0.2;
         }
       }
-      trunkGeo.computeVertexNormals();
-
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.updateVerticesData(VertexBuffer.PositionKind, trunkPos);
+      trunk.createNormals(false);
       trunk.position.y = 1.25;
-      trunk.castShadow = true;
-      trunk.receiveShadow = true;
-      tree.add(trunk);
+      trunk.material = trunkMaterial;
+      trunk.parent = tree;
 
       if (type === 'oak') {
-        // Fluffy cloud-like leaves
-        const crown = new THREE.Group();
+        // Fluffy cloud-like leaves using icospheres
+        const crown = new TransformNode(`crown_${i}`, scene);
         crown.position.y = 2.5;
-        const leafGeo = new THREE.DodecahedronGeometry(1, 1);
-        for(let k=0; k<5; k++) {
-            const leafPuff = new THREE.Mesh(leafGeo, leafMat);
-            leafPuff.scale.setScalar(randomRange(0.8, 1.4));
-            leafPuff.position.set(
-                randomRange(-0.8, 0.8),
-                randomRange(-0.5, 0.5),
-                randomRange(-0.8, 0.8)
-            );
-            leafPuff.castShadow = true;
-            leafPuff.receiveShadow = true;
-            crown.add(leafPuff);
+        crown.parent = tree;
+
+        for (let k = 0; k < 5; k++) {
+          const puff = MeshBuilder.CreateSphere(
+            `leaf_${i}_${k}`,
+            { diameter: 2, segments: 2 }, // low-poly icosphere
+            scene,
+          );
+          const s = randomRange(0.8, 1.4);
+          puff.scaling.setAll(s);
+          puff.position.set(
+            randomRange(-0.8, 0.8),
+            randomRange(-0.5, 0.5),
+            randomRange(-0.8, 0.8),
+          );
+          puff.material = leafMaterial;
+          puff.parent = crown;
         }
-        tree.add(crown);
       } else if (type === 'pine') {
-        // Sharp layered pine leaves
-        for(let k=0; k<4; k++) {
-            const h = 1.5 - (k * 0.2);
-            const w = 1.8 - (k * 0.35);
-            const coneGeo = new THREE.ConeGeometry(w, h, 7);
-            const cone = new THREE.Mesh(coneGeo, leafMat);
-            cone.position.y = 1.5 + k * 0.9;
-            cone.castShadow = true;
-            cone.receiveShadow = true;
-            tree.add(cone);
+        // Sharp layered pine cones
+        for (let k = 0; k < 4; k++) {
+          const h = 1.5 - k * 0.2;
+          const w = 1.8 - k * 0.35;
+          const cone = MeshBuilder.CreateCylinder(
+            `pine_${i}_${k}`,
+            { diameterTop: 0, diameterBottom: w * 2, height: h, tessellation: 7 },
+            scene,
+          );
+          cone.position.y = 1.5 + k * 0.9;
+          cone.material = leafMaterial;
+          cone.parent = tree;
         }
       } else if (type === 'dead') {
-         // Spooky branches
-         for(let k=0; k<3; k++) {
-            const branchGeo = new THREE.CylinderGeometry(0.05, 0.1, 1.5, 5);
-            const branch = new THREE.Mesh(branchGeo, trunkMat);
-            branch.position.y = 2.0 + k*0.4;
-            branch.position.x = (k%2===0?0.5:-0.5);
-            branch.rotation.z = (k%2===0?-0.8:0.8);
-            branch.rotation.y = randomRange(0, Math.PI);
-            branch.castShadow = true;
-            tree.add(branch);
-         }
+        // Spooky branches
+        for (let k = 0; k < 3; k++) {
+          const branch = MeshBuilder.CreateCylinder(
+            `branch_${i}_${k}`,
+            { diameterTop: 0.1, diameterBottom: 0.2, height: 1.5, tessellation: 5 },
+            scene,
+          );
+          branch.position.y = 2.0 + k * 0.4;
+          branch.position.x = k % 2 === 0 ? 0.5 : -0.5;
+          branch.rotation.z = k % 2 === 0 ? -0.8 : 0.8;
+          branch.rotation.y = randomRange(0, Math.PI);
+          branch.material = trunkMaterial;
+          branch.parent = tree;
+        }
       }
-
-      this.group.add(tree);
     }
   }
 }

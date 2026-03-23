@@ -1,15 +1,23 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
-import { Rat } from '../entities/enemies/Rat';
-import { Cat } from '../entities/enemies/Cat';
 import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
 import { randomRange } from '../utils/math';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import type { LevelData } from './Level1';
+
+import { Rat } from '../entities/enemies/Rat';
+import { Cat } from '../entities/enemies/Cat';
 
 /**
  * Level 10: Vulcao Ardente
@@ -19,77 +27,82 @@ import type { LevelData } from './Level1';
  */
 
 function createLavaRiver(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   length: number, width: number,
   rotation = 0
 ) {
-  // Long narrow lava surface
-  const lavaGeo = new THREE.CapsuleGeometry(width / 2, length, 6, 8);
-  const lavaMat = new THREE.MeshBasicMaterial({ color: C.L10_LAVA });
-  const lava = new THREE.Mesh(lavaGeo, lavaMat);
+  // Long narrow lava surface using a capsule-like cylinder
+  const lava = MeshBuilder.CreateCapsule('lavaRiver', {
+    radius: width / 2,
+    height: length,
+    tessellation: 6,
+    subdivisions: 8,
+  }, scene);
   lava.rotation.x = Math.PI / 2;
   lava.rotation.z = rotation;
   lava.position.set(x, y + 0.05, z);
-  scene.add(lava);
+  lava.material = basicMat('lavaMat', C.L10_LAVA, scene);
 
   // Lava glow along the river
-  const glow = new THREE.PointLight(C.L10_LAVA, 1.2, 14);
-  glow.position.set(x, y + 0.8, z);
-  scene.add(glow);
+  const glow = new PointLight('lavaGlow', new Vector3(x, y + 0.8, z), scene);
+  glow.diffuse = hexColor(C.L10_LAVA);
+  glow.intensity = 1.2;
+  glow.range = 14;
 
-  // Secondary glow at river ends for longer coverage
-  const glow2 = new THREE.PointLight(C.L10_LAVA, 0.8, 10);
+  // Secondary glow at river end for longer coverage
   const offsetX = Math.sin(rotation) * length * 0.4;
   const offsetZ = Math.cos(rotation) * length * 0.4;
-  glow2.position.set(x + offsetX, y + 0.8, z + offsetZ);
-  scene.add(glow2);
+  const glow2 = new PointLight('lavaGlow2', new Vector3(x + offsetX, y + 0.8, z + offsetZ), scene);
+  glow2.diffuse = hexColor(C.L10_LAVA);
+  glow2.intensity = 0.8;
+  glow2.range = 10;
 }
 
 function createAshParticle(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number
 ) {
   // Floating ash cloud (grey glowing point)
-  const ashLight = new THREE.PointLight(C.L10_ASH, 0.3, 5);
-  ashLight.position.set(x, y, z);
-  scene.add(ashLight);
+  const ashLight = new PointLight('ashLight', new Vector3(x, y, z), scene);
+  ashLight.diffuse = hexColor(C.L10_ASH);
+  ashLight.intensity = 0.3;
+  ashLight.range = 5;
 
   // Small grey sphere as visible ash
-  const ashGeo = new THREE.SphereGeometry(0.08, 4, 3);
-  const ashMat = new THREE.MeshBasicMaterial({ color: C.L10_ASH });
-  const ashMesh = new THREE.Mesh(ashGeo, ashMat);
+  const ashMesh = MeshBuilder.CreateSphere('ashSphere', {
+    diameter: 0.08 * 2,
+    segments: 4,
+  }, scene);
   ashMesh.position.set(x, y, z);
-  scene.add(ashMesh);
+  ashMesh.material = basicMat('ashMat', C.L10_ASH, scene);
 }
 
-export function createLevel10(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel10(scene: Scene, physics: PhysicsWorld): LevelData {
   // Heavy red volcanic fog
-  scene.fog = new THREE.Fog(C.L10_SKY_BOTTOM, 30, 90);
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogStart = 30;
+  scene.fogEnd = 90;
+  scene.fogColor = hexColor(C.L10_SKY_BOTTOM);
 
   // Skybox (infernal red-black sky)
-  const sky = new Skybox(C.L10_SKY_TOP, C.L10_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  const sky = new Skybox(C.L10_SKY_TOP, C.L10_SKY_BOTTOM, scene);
 
   // Lava underglow (hemisphere light for warm lava ambience)
-  const lavaUnderLight = new THREE.HemisphereLight(C.L10_LAVA, 0x110000, 0.4);
-  scene.add(lavaUnderLight);
+  const lavaUnderLight = new HemisphericLight('lavaHemi', new Vector3(0, 1, 0), scene);
+  lavaUnderLight.diffuse = hexColor(C.L10_LAVA);
+  lavaUnderLight.groundColor = hexColor(0x110000);
+  lavaUnderLight.intensity = 0.4;
 
-  const ambientLight = new THREE.AmbientLight(0x330000, 0.3);
-  scene.add(ambientLight);
+  // Dim dark ambient via directional light from above
+  const ambientDir = new DirectionalLight('ambDir', new Vector3(0, -1, 0), scene);
+  ambientDir.diffuse = hexColor(0x330000);
+  ambientDir.intensity = 0.3;
 
-  const dirLight = new THREE.DirectionalLight(0xff6622, 0.8);
-  dirLight.position.set(-15, 30, 10);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 130;
-  dirLight.shadow.camera.left = -55;
-  dirLight.shadow.camera.right = 55;
-  dirLight.shadow.camera.top = 55;
-  dirLight.shadow.camera.bottom = -55;
-  scene.add(dirLight);
+  // Main dramatic orange directional light
+  const dirLight = new DirectionalLight('dir', new Vector3(15, -30, -10).normalize(), scene);
+  dirLight.diffuse = hexColor(0xff6622);
+  dirLight.intensity = 0.8;
 
   // Terrain (volcanic, jagged, very rugged)
   const terrain = new Terrain({
@@ -100,8 +113,7 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     color: C.L10_GROUND,
     colorDark: C.L10_GROUND_DARK,
     noiseScale: 0.05,
-  });
-  scene.add(terrain.mesh);
+  }, scene);
   terrain.initPhysics(physics);
 
   // Lava rivers (long narrow channels across the terrain)
@@ -135,8 +147,7 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     count: 55,
     areaSize: 95,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  }, scene);
 
   // Obsidian rocks (near-black)
   const obsidianRocks = new Rocks({
@@ -144,8 +155,7 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     count: 30,
     areaSize: 95,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(obsidianRocks.group);
+  }, scene);
 
   // Enemies: 5 rats + 4 cats (heat-resistant survivors)
   const enemies: Enemy[] = [];
@@ -158,7 +168,6 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     const rat = new Rat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rat.mesh);
     enemies.push(rat);
   }
 
@@ -170,7 +179,6 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     const cat = new Cat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     cat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(cat.mesh);
     enemies.push(cat);
   }
 
@@ -179,7 +187,6 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Gato Vulcanico';
   const bossY = terrain.getHeightAt(35, 35) + 4;
   boss.initPhysics(physics, 35, bossY, 35, 1.0);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Dramatic lava glow ring around boss area
@@ -189,14 +196,17 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     const tz = 35 + Math.sin(angle) * 7;
     const ty = terrain.getHeightAt(tx, tz);
 
-    const torchLight = new THREE.PointLight(C.L10_LAVA, 1.0, 9);
-    torchLight.position.set(tx, ty + 2.5, tz);
-    scene.add(torchLight);
+    const torchLight = new PointLight('bossLava' + i, new Vector3(tx, ty + 2.5, tz), scene);
+    torchLight.diffuse = hexColor(C.L10_LAVA);
+    torchLight.intensity = 1.0;
+    torchLight.range = 9;
 
-    const flameGeo = new THREE.SphereGeometry(0.18, 4, 4);
-    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: C.L10_LAVA }));
-    flame.position.copy(torchLight.position);
-    scene.add(flame);
+    const flame = MeshBuilder.CreateSphere('bossFlame' + i, {
+      diameter: 0.18 * 2,
+      segments: 4,
+    }, scene);
+    flame.position.set(tx, ty + 2.5, tz);
+    flame.material = basicMat('bossFlameMat' + i, C.L10_LAVA, scene);
   }
 
   // Biscuits (scarce - only 5 on the volcanic terrain)
@@ -205,8 +215,7 @@ export function createLevel10(physics: PhysicsWorld): LevelData {
     const x = randomRange(-30, 30);
     const z = randomRange(-30, 30);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
+    const biscuit = new Biscuit(x, y, z, scene);
     biscuits.push(biscuit);
   }
 

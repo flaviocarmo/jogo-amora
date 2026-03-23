@@ -1,36 +1,25 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 
 export class Skybox {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
 
-  constructor(topColor: number, bottomColor: number, radius = 200) {
-    const geo = new THREE.SphereGeometry(radius, 16, 16);
-    const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        topColor: { value: new THREE.Color(topColor) },
-        bottomColor: { value: new THREE.Color(bottomColor) },
-      },
-      vertexShader: `
-        varying vec3 vWorldPos;
-        void main() {
-          vec4 worldPos = modelMatrix * vec4(position, 1.0);
-          vWorldPos = worldPos.xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        varying vec3 vWorldPos;
-        void main() {
-          float h = normalize(vWorldPos).y * 0.5 + 0.5;
-          gl_FragColor = vec4(mix(bottomColor, topColor, h), 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
+  constructor(topColor: number, bottomColor: number, scene: Scene) {
+    // Create a large sky sphere
+    this.mesh = MeshBuilder.CreateSphere('skybox', { diameter: 400, segments: 16 }, scene);
+    this.mesh.infiniteDistance = true;
 
-    this.mesh = new THREE.Mesh(geo, mat);
+    const mat = new StandardMaterial('skyMat', scene);
+    const top = Color3.FromHexString('#' + topColor.toString(16).padStart(6, '0'));
+    const bottom = Color3.FromHexString('#' + bottomColor.toString(16).padStart(6, '0'));
+    // Use emissive for unlit sky
+    mat.emissiveColor = Color3.Lerp(top, bottom, 0.5);
+    mat.disableLighting = true;
+    mat.backFaceCulling = false;
+    this.mesh.material = mat;
+    this.mesh.isPickable = false;
   }
 }

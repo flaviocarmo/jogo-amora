@@ -1,5 +1,10 @@
-import * as THREE from 'three';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 import { Enemy, EnemyState } from './Enemy';
+import { toonMat, basicMat } from '../../utils/materials';
 import * as C from '../../utils/colors';
 
 export class Rat extends Enemy {
@@ -8,11 +13,11 @@ export class Rat extends Enemy {
   private zigzagInterval = 0.5;
 
   // Graphic references for animation
-  private graphicGroup!: THREE.Group;
-  private bodyMesh!: THREE.Mesh;
-  private headGroup!: THREE.Group;
-  private legs: THREE.Mesh[] = [];
-  private tailMesh!: THREE.Mesh;
+  private graphicGroup!: TransformNode;
+  private bodyMesh!: Mesh;
+  private headGroup!: TransformNode;
+  private legs: Mesh[] = [];
+  private tailMesh!: Mesh;
   private walkCycle = 0;
 
   constructor(x: number, z: number, isBoss = false) {
@@ -21,110 +26,116 @@ export class Rat extends Enemy {
     this.detectionRadius = isBoss ? 16 : 10;
     this.isBoss = isBoss;
     this.bossName = isBoss ? 'Rato-Rei' : '';
-    this.buildModel(isBoss);
   }
 
-  private buildModel(isBoss: boolean) {
+  protected override buildModel(scene: Scene) {
+    const isBoss = this.isBoss;
     const scale = isBoss ? 2.2 : 1;
-    const toon = (color: number) => new THREE.MeshToonMaterial({ color });
     const bodyColor = isBoss ? C.BOSS_TINT : C.RAT_BODY;
 
-    this.graphicGroup = new THREE.Group();
-    this.mesh.add(this.graphicGroup);
+    this.graphicGroup = new TransformNode('rat-gfx', scene);
+    this.graphicGroup.parent = this.mesh;
 
-    // Body: small elongated sphere (stretched on Z axis)
-    const bodyGeo = new THREE.SphereGeometry(0.3, 8, 6);
-    this.bodyMesh = new THREE.Mesh(bodyGeo, toon(bodyColor));
-    this.bodyMesh.scale.set(0.85, 0.8, 1.4); // elongated along Z
+    // Body: small elongated sphere
+    this.bodyMesh = MeshBuilder.CreateSphere('rat-body', { diameter: 0.6, segments: 8 }, scene);
+    this.bodyMesh.material = toonMat('rat-body-mat', bodyColor, scene);
+    this.bodyMesh.scaling.set(0.85, 0.8, 1.4);
     this.bodyMesh.position.y = 0.3;
-    this.graphicGroup.add(this.bodyMesh);
+    this.bodyMesh.parent = this.graphicGroup;
 
-    // Head Group — positioned at front of elongated body
-    this.headGroup = new THREE.Group();
+    // Head Group
+    this.headGroup = new TransformNode('rat-head', scene);
     this.headGroup.position.set(0, 0.42, 0.38);
-    this.graphicGroup.add(this.headGroup);
+    this.headGroup.parent = this.graphicGroup;
 
-    // Head: slightly elongated sphere (snout-like)
-    const headGeo = new THREE.SphereGeometry(0.2, 8, 6);
-    const head = new THREE.Mesh(headGeo, toon(bodyColor));
-    head.scale.set(0.85, 0.85, 1.25); // pointed forward for snout shape
-    this.headGroup.add(head);
+    // Head: slightly elongated sphere
+    const head = MeshBuilder.CreateSphere('rat-headcore', { diameter: 0.4, segments: 8 }, scene);
+    head.material = toonMat('rat-headcore-mat', bodyColor, scene);
+    head.scaling.set(0.85, 0.85, 1.25);
+    head.parent = this.headGroup;
 
     // Ears: round, large relative to head
     for (const side of [-1, 1]) {
-      const earGeo = new THREE.SphereGeometry(0.1, 8, 6);
-      const ear = new THREE.Mesh(earGeo, toon(C.RAT_TAIL)); // slightly pink
-      ear.scale.set(1, 1.15, 0.4); // flattened disc shape
+      const ear = MeshBuilder.CreateSphere(`rat-ear${side}`, { diameter: 0.2, segments: 8 }, scene);
+      ear.material = toonMat(`rat-ear-mat${side}`, C.RAT_TAIL, scene);
+      ear.scaling.set(1, 1.15, 0.4);
       ear.position.set(side * 0.14, 0.14, -0.06);
       ear.rotation.z = side * 0.2;
-      this.headGroup.add(ear);
+      ear.parent = this.headGroup;
     }
 
     // Eyes: small, red
     for (const side of [-1, 1]) {
-      const eyeGeo = new THREE.SphereGeometry(0.04, 5, 5);
-      const eye = new THREE.Mesh(eyeGeo, new THREE.MeshBasicMaterial({ color: C.RAT_EYE }));
+      const eye = MeshBuilder.CreateSphere(`rat-eye${side}`, { diameter: 0.08, segments: 5 }, scene);
+      eye.material = basicMat(`rat-eye-mat${side}`, C.RAT_EYE, scene);
       eye.position.set(side * 0.09, 0.06, 0.17);
-      this.headGroup.add(eye);
+      eye.parent = this.headGroup;
     }
 
-    // Teeth: two small white rectangles protruding from mouth
+    // Teeth: two small white rectangles
     for (const side of [-1, 1]) {
-      const toothGeo = new THREE.BoxGeometry(0.04, 0.05, 0.03);
-      const tooth = new THREE.Mesh(toothGeo, new THREE.MeshToonMaterial({ color: 0xffffff }));
+      const tooth = MeshBuilder.CreateBox(`rat-tooth${side}`, {
+        width: 0.04, height: 0.05, depth: 0.03,
+      }, scene);
+      tooth.material = toonMat(`rat-tooth-mat${side}`, 0xffffff, scene);
       tooth.position.set(side * 0.03, -0.1, 0.18);
-      this.headGroup.add(tooth);
+      tooth.parent = this.headGroup;
     }
 
-    // Legs: 4 very small legs under body
+    // Legs: 4 very small
     const legPositions = [
       { x: -0.18, z: 0.15 },
       { x:  0.18, z: 0.15 },
       { x: -0.18, z: -0.1 },
       { x:  0.18, z: -0.1 },
     ];
-    for (const lp of legPositions) {
-      const legGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.18, 5);
-      const leg = new THREE.Mesh(legGeo, toon(bodyColor));
+    for (const [i, lp] of legPositions.entries()) {
+      const leg = MeshBuilder.CreateCylinder(`rat-leg${i}`, {
+        diameterTop: 0.08, diameterBottom: 0.1, height: 0.18, tessellation: 5,
+      }, scene);
+      leg.material = toonMat(`rat-leg-mat${i}`, bodyColor, scene);
       leg.position.set(lp.x, 0.08, lp.z);
-      this.graphicGroup.add(leg);
+      leg.parent = this.graphicGroup;
       this.legs.push(leg);
     }
 
     // Tail: long thin cylinder, slightly pink
-    const tailGeo = new THREE.CylinderGeometry(0.02, 0.015, 0.55, 5);
-    this.tailMesh = new THREE.Mesh(tailGeo, toon(C.RAT_TAIL));
-    // Rotate so it extends backward from body
+    this.tailMesh = MeshBuilder.CreateCylinder('rat-tail', {
+      diameterTop: 0.04, diameterBottom: 0.03, height: 0.55, tessellation: 5,
+    }, scene);
+    this.tailMesh.material = toonMat('rat-tail-mat', C.RAT_TAIL, scene);
     this.tailMesh.rotation.x = Math.PI / 2 + 0.3;
     this.tailMesh.position.set(0, 0.22, -0.4);
-    this.graphicGroup.add(this.tailMesh);
+    this.tailMesh.parent = this.graphicGroup;
 
-    this.mesh.scale.setScalar(scale);
+    this.mesh.scaling.setAll(scale);
 
     // Boss crown
     if (isBoss) {
-      // Crown base
-      const crownGeo = new THREE.CylinderGeometry(0.14, 0.18, 0.12, 6);
-      const crown = new THREE.Mesh(crownGeo, toon(0xffdd00));
+      const crown = MeshBuilder.CreateCylinder('rat-crown', {
+        diameterTop: 0.28, diameterBottom: 0.36, height: 0.12, tessellation: 6,
+      }, scene);
+      crown.material = toonMat('rat-crown-mat', 0xffdd00, scene);
       crown.position.set(0, 0.3, -0.05);
-      this.headGroup.add(crown);
+      crown.parent = this.headGroup;
 
-      // Crown spikes
       for (let i = 0; i < 6; i++) {
-        const spikeGeo = new THREE.ConeGeometry(0.03, 0.1, 4);
-        const spike = new THREE.Mesh(spikeGeo, toon(0xffdd00));
+        const spike = MeshBuilder.CreateCylinder(`rat-spike${i}`, {
+          diameterTop: 0, diameterBottom: 0.06, height: 0.1, tessellation: 4,
+        }, scene);
+        spike.material = toonMat(`rat-spike-mat${i}`, 0xffdd00, scene);
         const angle = (i / 6) * Math.PI * 2;
         spike.position.set(
           Math.cos(angle) * 0.14,
           0.41,
           Math.sin(angle) * 0.14 - 0.05
         );
-        this.headGroup.add(spike);
+        spike.parent = this.headGroup;
       }
     }
   }
 
-  updateAI(dt: number, playerPos: THREE.Vector3) {
+  updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
     if (!this.alive || !this.body) return;
 
@@ -133,55 +144,44 @@ export class Rat extends Enemy {
       this.zigzagTimer -= dt;
       if (this.zigzagTimer <= 0) {
         this.zigzagTimer = this.zigzagInterval;
-        const vel = this.body.linvel();
-        // Compute a lateral vector perpendicular to current velocity (XZ plane)
+        const vel = this.body.getLinearVelocity();
         const lateralX = -vel.z;
         const lateralZ = vel.x;
         const lateralLen = Math.sqrt(lateralX * lateralX + lateralZ * lateralZ);
         if (lateralLen > 0.01) {
           const nx = lateralX / lateralLen;
           const nz = lateralZ / lateralLen;
-          // Kick sideways with random sign and magnitude
           const kick = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
-          this.body.setLinvel({
-            x: vel.x + nx * kick,
-            y: vel.y,
-            z: vel.z + nz * kick,
-          }, true);
+          this.body.setLinearVelocity(new Vector3(
+            vel.x + nx * kick,
+            vel.y,
+            vel.z + nz * kick,
+          ));
         }
       }
     } else {
-      // Reset timer so first zigzag fires quickly on entering chase
       this.zigzagTimer = 0;
     }
 
     // Animation
-    const vel = this.body.linvel();
+    const vel = this.body.getLinearVelocity();
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.1;
 
     if (isMoving) {
-      // Fast scurry cycle — speed proportional to actual velocity
       this.walkCycle += dt * 18 * Math.sqrt(speedSq) * 0.25;
       const sin = Math.sin(this.walkCycle);
       const cos = Math.cos(this.walkCycle);
 
-      // Legs scurry in pairs
       this.legs[0].rotation.x =  sin * 0.7;
       this.legs[1].rotation.x = -sin * 0.7;
       this.legs[2].rotation.x = -sin * 0.7;
       this.legs[3].rotation.x =  sin * 0.7;
 
-      // Body low, fast bob
       this.bodyMesh.position.y = 0.3 + Math.abs(cos) * 0.04;
-
-      // Head bobs slightly
       this.headGroup.rotation.x = sin * 0.08;
-
-      // Tail sways side to side
       this.tailMesh.rotation.z = sin * 0.25;
     } else {
-      // Idle: reset leg angles, tail rests, subtle breathing
       for (const leg of this.legs) leg.rotation.x *= 0.8;
       this.bodyMesh.position.y += (0.3 - this.bodyMesh.position.y) * 0.1;
       this.headGroup.rotation.x *= 0.8;
@@ -190,7 +190,7 @@ export class Rat extends Enemy {
       // Idle nose-twitch
       this.walkCycle += dt * 6;
       const breathe = Math.sin(this.walkCycle) * 0.015;
-      this.headGroup.scale.setScalar(1 + breathe);
+      this.headGroup.scaling.setAll(1 + breathe);
     }
   }
 }

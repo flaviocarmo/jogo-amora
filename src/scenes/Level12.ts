@@ -1,18 +1,27 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
-import { Rabbit } from '../entities/enemies/Rabbit';
-import { Pig } from '../entities/enemies/Pig';
-import { Cat } from '../entities/enemies/Cat';
-import { Rat } from '../entities/enemies/Rat';
-import { Chicken } from '../entities/enemies/Chicken';
 import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
 import { randomRange } from '../utils/math';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import type { LevelData } from './Level1';
+
+import { Rabbit } from '../entities/enemies/Rabbit';
+import { Pig } from '../entities/enemies/Pig';
+import { Cat } from '../entities/enemies/Cat';
+import { Rat } from '../entities/enemies/Rat';
+import { Chicken } from '../entities/enemies/Chicken';
 
 /**
  * Level 12: Torre do Imperador - FINAL BOSS
@@ -23,171 +32,207 @@ import type { LevelData } from './Level1';
  */
 
 function createThroneColumn(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   height: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('throneColumn', scene);
+  root.position.set(x, y, z);
 
   // Column base (wide flat box)
-  const baseGeo = new THREE.BoxGeometry(1.0, 0.3, 1.0);
-  const base = new THREE.Mesh(baseGeo, toon(C.L12_TOWER));
-  base.position.y = 0.15;
-  base.castShadow = true;
-  base.receiveShadow = true;
-  group.add(base);
+  const base = MeshBuilder.CreateBox('colBase', {
+    width: 1.0,
+    height: 0.3,
+    depth: 1.0,
+  }, scene);
+  base.position.set(0, 0.15, 0);
+  base.material = toonMat('colBaseMat', C.L12_TOWER, scene);
+  base.parent = root;
 
   // Column shaft (cylinder)
-  const shaftGeo = new THREE.CylinderGeometry(0.35, 0.4, height, 8);
-  const shaft = new THREE.Mesh(shaftGeo, toon(C.L12_TOWER));
-  shaft.position.y = 0.3 + height / 2;
-  shaft.castShadow = true;
-  group.add(shaft);
+  const shaft = MeshBuilder.CreateCylinder('colShaft', {
+    diameterTop: 0.35 * 2,
+    diameterBottom: 0.4 * 2,
+    height,
+    tessellation: 8,
+  }, scene);
+  shaft.position.set(0, 0.3 + height / 2, 0);
+  shaft.material = toonMat('colShaftMat', C.L12_TOWER, scene);
+  shaft.parent = root;
 
   // Column capital (top decorative box)
-  const capitalGeo = new THREE.BoxGeometry(0.9, 0.25, 0.9);
-  const capital = new THREE.Mesh(capitalGeo, toon(C.L12_TOWER));
-  capital.position.y = 0.3 + height + 0.125;
-  group.add(capital);
+  const capital = MeshBuilder.CreateBox('colCapital', {
+    width: 0.9,
+    height: 0.25,
+    depth: 0.9,
+  }, scene);
+  capital.position.set(0, 0.3 + height + 0.125, 0);
+  capital.material = toonMat('colCapitalMat', C.L12_TOWER, scene);
+  capital.parent = root;
 
   // Gold sphere decoration on top of capital
-  const goldGeo = new THREE.SphereGeometry(0.18, 6, 5);
-  const goldSphere = new THREE.Mesh(goldGeo, toon(C.L12_GOLD));
-  goldSphere.position.y = 0.3 + height + 0.35;
-  group.add(goldSphere);
+  const goldSphere = MeshBuilder.CreateSphere('colGold', {
+    diameter: 0.18 * 2,
+    segments: 6,
+  }, scene);
+  goldSphere.position.set(0, 0.3 + height + 0.35, 0);
+  goldSphere.material = toonMat('colGoldMat', C.L12_GOLD, scene);
+  goldSphere.parent = root;
 
   // Torch on column (flame + light)
-  const torchLight = new THREE.PointLight(0xff8833, 1.0, 12);
-  torchLight.position.set(0.5, height * 0.65, 0);
-  group.add(torchLight);
+  const torchLight = new PointLight('colTorch', new Vector3(x + 0.5, y + height * 0.65, z), scene);
+  torchLight.diffuse = hexColor(0xff8833);
+  torchLight.intensity = 1.0;
+  torchLight.range = 12;
 
-  const flameGeo = new THREE.SphereGeometry(0.14, 4, 4);
-  const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xff8833 }));
-  flame.position.copy(torchLight.position);
-  group.add(flame);
-
-  group.position.set(x, y, z);
-  scene.add(group);
+  const flame = MeshBuilder.CreateSphere('colFlame', {
+    diameter: 0.14 * 2,
+    segments: 4,
+  }, scene);
+  flame.position.set(x + 0.5, y + height * 0.65, z);
+  flame.material = basicMat('colFlameMat', 0xff8833, scene);
 }
 
 function createThrone(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('throne', scene);
+  root.position.set(x, y, z);
 
   // Throne base (wide platform seat)
-  const seatGeo = new THREE.BoxGeometry(2.4, 0.4, 1.8);
-  const seat = new THREE.Mesh(seatGeo, toon(C.L12_THRONE));
-  seat.position.y = 0.2;
-  seat.castShadow = true;
-  seat.receiveShadow = true;
-  group.add(seat);
+  const seat = MeshBuilder.CreateBox('throneSeat', {
+    width: 2.4,
+    height: 0.4,
+    depth: 1.8,
+  }, scene);
+  seat.position.set(0, 0.2, 0);
+  seat.material = toonMat('throneSeatMat', C.L12_THRONE, scene);
+  seat.parent = root;
 
   // Throne back (tall ornate back panel)
-  const backGeo = new THREE.BoxGeometry(2.4, 3.2, 0.3);
-  const back = new THREE.Mesh(backGeo, toon(C.L12_THRONE));
+  const back = MeshBuilder.CreateBox('throneBack', {
+    width: 2.4,
+    height: 3.2,
+    depth: 0.3,
+  }, scene);
   back.position.set(0, 2.0, -0.75);
-  back.castShadow = true;
-  group.add(back);
+  back.material = toonMat('throneBackMat', C.L12_THRONE, scene);
+  back.parent = root;
 
   // Back panel gold trim (thin overlay)
-  const trimGeo = new THREE.BoxGeometry(2.0, 2.6, 0.08);
-  const trim = new THREE.Mesh(trimGeo, toon(C.L12_GOLD));
+  const trim = MeshBuilder.CreateBox('throneTrim', {
+    width: 2.0,
+    height: 2.6,
+    depth: 0.08,
+  }, scene);
   trim.position.set(0, 2.0, -0.58);
-  group.add(trim);
+  trim.material = toonMat('throneTrimMat', C.L12_GOLD, scene);
+  trim.parent = root;
 
   // Arm rests (left and right)
   for (const side of [-1, 1]) {
-    const armGeo = new THREE.BoxGeometry(0.25, 0.2, 1.6);
-    const arm = new THREE.Mesh(armGeo, toon(C.L12_THRONE));
+    const arm = MeshBuilder.CreateBox('throneArm' + side, {
+      width: 0.25,
+      height: 0.2,
+      depth: 1.6,
+    }, scene);
     arm.position.set(side * 1.1, 0.5, -0.1);
-    group.add(arm);
+    arm.material = toonMat('throneArmMat' + side, C.L12_THRONE, scene);
+    arm.parent = root;
 
     // Gold orb on armrest end
-    const orbGeo = new THREE.SphereGeometry(0.15, 6, 5);
-    const orb = new THREE.Mesh(orbGeo, toon(C.L12_GOLD));
+    const orb = MeshBuilder.CreateSphere('throneOrb' + side, {
+      diameter: 0.15 * 2,
+      segments: 6,
+    }, scene);
     orb.position.set(side * 1.1, 0.65, 0.65);
-    group.add(orb);
+    orb.material = toonMat('throneOrbMat' + side, C.L12_GOLD, scene);
+    orb.parent = root;
   }
 
   // Crown-like spires on throne back top
-  const spirePositions = [-0.9, -0.3, 0.3, 0.9];
-  for (const sx of spirePositions) {
-    const spireGeo = new THREE.ConeGeometry(0.1, 0.5, 4);
-    const spire = new THREE.Mesh(spireGeo, toon(C.L12_GOLD));
+  const spireXPositions = [-0.9, -0.3, 0.3, 0.9];
+  for (const sx of spireXPositions) {
+    const spire = MeshBuilder.CreateCylinder('throneSpire', {
+      diameterTop: 0,
+      diameterBottom: 0.1 * 2,
+      height: 0.5,
+      tessellation: 4,
+    }, scene);
     spire.position.set(sx, 3.85, -0.75);
-    group.add(spire);
+    spire.material = toonMat('throneSpireMat', C.L12_GOLD, scene);
+    spire.parent = root;
   }
 
   // Throne step platform (slightly wider, lower)
-  const stepGeo = new THREE.BoxGeometry(3.2, 0.2, 2.4);
-  const step = new THREE.Mesh(stepGeo, toon(C.L12_TOWER));
-  step.position.y = -0.1;
-  step.receiveShadow = true;
-  group.add(step);
-
-  group.position.set(x, y, z);
-  scene.add(group);
+  const step = MeshBuilder.CreateBox('throneStep', {
+    width: 3.2,
+    height: 0.2,
+    depth: 2.4,
+  }, scene);
+  step.position.set(0, -0.1, 0);
+  step.material = toonMat('throneStepMat', C.L12_TOWER, scene);
+  step.parent = root;
 }
 
 function createCarpet(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   length: number
 ) {
   // Red carpet runner from spawn toward throne
-  const carpetGeo = new THREE.BoxGeometry(2.0, 0.08, length);
-  const carpetMat = new THREE.MeshToonMaterial({ color: C.L12_CARPET });
-  const carpet = new THREE.Mesh(carpetGeo, carpetMat);
+  const carpet = MeshBuilder.CreateBox('carpet', {
+    width: 2.0,
+    height: 0.08,
+    depth: length,
+  }, scene);
   carpet.position.set(x, y + 0.04, z);
-  carpet.receiveShadow = true;
-  scene.add(carpet);
+  carpet.material = toonMat('carpetMat', C.L12_CARPET, scene);
 
   // Gold border strips along the carpet edges
   for (const side of [-1, 1]) {
-    const borderGeo = new THREE.BoxGeometry(0.12, 0.09, length);
-    const border = new THREE.Mesh(borderGeo, new THREE.MeshToonMaterial({ color: C.L12_GOLD }));
+    const border = MeshBuilder.CreateBox('carpetBorder' + side, {
+      width: 0.12,
+      height: 0.09,
+      depth: length,
+    }, scene);
     border.position.set(x + side * 1.06, y + 0.045, z);
-    scene.add(border);
+    border.material = toonMat('carpetBorderMat' + side, C.L12_GOLD, scene);
   }
 }
 
-export function createLevel12(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel12(scene: Scene, physics: PhysicsWorld): LevelData {
   // Dramatic dark-red atmosphere of the emperor's tower
-  scene.fog = new THREE.Fog(C.L12_SKY_BOTTOM, 35, 100);
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogStart = 35;
+  scene.fogEnd = 100;
+  scene.fogColor = hexColor(C.L12_SKY_BOTTOM);
 
   // Skybox (pitch-black night above the tower)
-  const sky = new Skybox(C.L12_SKY_TOP, C.L12_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  const sky = new Skybox(C.L12_SKY_TOP, C.L12_SKY_BOTTOM, scene);
 
-  // Dramatic gold-red lighting
-  const hemiLight = new THREE.HemisphereLight(0x331100, 0x110000, 0.4);
-  scene.add(hemiLight);
+  // Dramatic gold-red hemisphere lighting
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(0x331100);
+  hemiLight.groundColor = hexColor(0x110000);
+  hemiLight.intensity = 0.4;
 
-  const ambientLight = new THREE.AmbientLight(0x221100, 0.3);
-  scene.add(ambientLight);
+  // Very dim dark ambient
+  const ambientDir = new DirectionalLight('ambDir', new Vector3(0, -1, 0), scene);
+  ambientDir.diffuse = hexColor(0x221100);
+  ambientDir.intensity = 0.3;
 
   // Main dramatic directional light from above
-  const dirLight = new THREE.DirectionalLight(0xff9944, 0.9);
-  dirLight.position.set(0, 40, -20);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
-  dirLight.shadow.camera.far = 150;
-  dirLight.shadow.camera.left = -60;
-  dirLight.shadow.camera.right = 60;
-  dirLight.shadow.camera.top = 60;
-  dirLight.shadow.camera.bottom = -60;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(0, -40, 20).normalize(), scene);
+  dirLight.diffuse = hexColor(0xff9944);
+  dirLight.intensity = 0.9;
 
   // Gold accent light from throne direction
-  const throneLight = new THREE.PointLight(C.L12_GOLD, 1.5, 30);
-  throneLight.position.set(0, 10, 40);
-  scene.add(throneLight);
+  const throneLight = new PointLight('throneLight', new Vector3(0, 10, 40), scene);
+  throneLight.diffuse = hexColor(C.L12_GOLD);
+  throneLight.intensity = 1.5;
+  throneLight.range = 30;
 
   // Terrain (tower top platform, relatively flat with gentle height variation)
   const terrain = new Terrain({
@@ -198,8 +243,7 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     color: C.L12_GROUND,
     colorDark: C.L12_GROUND_DARK,
     noiseScale: 0.03,
-  });
-  scene.add(terrain.mesh);
+  }, scene);
   terrain.initPhysics(physics);
 
   // Red carpet from entrance toward throne (player enters from z = -35)
@@ -229,14 +273,17 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const tz = 38 + Math.sin(angle) * 9;
     const ty = terrain.getHeightAt(tx, tz);
 
-    const torchLight = new THREE.PointLight(0xff8833, 1.2, 10);
-    torchLight.position.set(tx, ty + 3, tz);
-    scene.add(torchLight);
+    const torchLight = new PointLight('throneTorch' + i, new Vector3(tx, ty + 3, tz), scene);
+    torchLight.diffuse = hexColor(0xff8833);
+    torchLight.intensity = 1.2;
+    torchLight.range = 10;
 
-    const flameGeo = new THREE.SphereGeometry(0.16, 4, 4);
-    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xff8833 }));
-    flame.position.copy(torchLight.position);
-    scene.add(flame);
+    const flame = MeshBuilder.CreateSphere('throneTorchFlame' + i, {
+      diameter: 0.16 * 2,
+      segments: 4,
+    }, scene);
+    flame.position.set(tx, ty + 3, tz);
+    flame.material = basicMat('throneFlameMat' + i, 0xff8833, scene);
   }
 
   // Gold decorative spheres scattered as floor ornaments
@@ -246,10 +293,12 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
   ];
   for (const pos of goldOrnamentPositions) {
     const py = terrain.getHeightAt(pos.x, pos.z);
-    const ornGeo = new THREE.SphereGeometry(0.22, 7, 6);
-    const orn = new THREE.Mesh(ornGeo, new THREE.MeshToonMaterial({ color: C.L12_GOLD }));
+    const orn = MeshBuilder.CreateSphere('goldOrn', {
+      diameter: 0.22 * 2,
+      segments: 7,
+    }, scene);
     orn.position.set(pos.x, py + 0.22, pos.z);
-    scene.add(orn);
+    orn.material = toonMat('goldOrnMat', C.L12_GOLD, scene);
   }
 
   // Dark stone rocks around the arena perimeter
@@ -258,8 +307,7 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     count: 30,
     areaSize: 100,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  }, scene);
 
   // Enemies: maximum difficulty - ALL enemy types
   const enemies: Enemy[] = [];
@@ -272,7 +320,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -283,7 +330,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const cat = new Cat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     cat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(cat.mesh);
     enemies.push(cat);
   }
 
@@ -294,7 +340,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const rat = new Rat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rat.mesh);
     enemies.push(rat);
   }
 
@@ -305,7 +350,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const chicken = new Chicken(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     chicken.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(chicken.mesh);
     enemies.push(chicken);
   }
 
@@ -316,7 +360,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -325,7 +368,6 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Imperador Supremo';
   const bossY = terrain.getHeightAt(0, 40) + 4;
   boss.initPhysics(physics, 0, bossY, 40, 1.2);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Biscuits (very scarce in the final arena - only 4)
@@ -334,8 +376,7 @@ export function createLevel12(physics: PhysicsWorld): LevelData {
     const x = randomRange(-30, 30);
     const z = randomRange(-30, 25);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
+    const biscuit = new Biscuit(x, y, z, scene);
     biscuits.push(biscuit);
   }
 

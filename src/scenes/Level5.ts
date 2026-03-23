@@ -1,4 +1,10 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Terrain } from '../world/Terrain';
 import { Vegetation } from '../world/Vegetation';
 import { Rocks } from '../world/Rocks';
@@ -9,6 +15,7 @@ import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
+import { toonMat, hexColor } from '../utils/materials';
 import { randomRange } from '../utils/math';
 import type { LevelData } from './Level1';
 
@@ -20,134 +27,128 @@ import type { LevelData } from './Level1';
  */
 
 function createSwampPool(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   radius: number
 ) {
   // Murky water disc
-  const waterGeo = new THREE.CircleGeometry(radius, 12);
-  const waterMat = new THREE.MeshToonMaterial({
-    color: C.L5_WATER,
-    transparent: true,
-    opacity: 0.7,
-  });
-  const water = new THREE.Mesh(waterGeo, waterMat);
-  water.rotation.x = -Math.PI / 2;
+  const water = MeshBuilder.CreateDisc('swampWater', { radius, tessellation: 12 }, scene);
+  const waterMat = new StandardMaterial('swampWaterMat', scene);
+  waterMat.diffuseColor = hexColor(C.L5_WATER);
+  waterMat.alpha = 0.7;
+  water.material = waterMat;
+  water.rotation.x = Math.PI / 2; // Babylon disc faces up by default; rotate to lie flat
   water.position.set(x, y + 0.05, z);
-  scene.add(water);
 
   // Lily pads on bigger pools
   if (radius > 2) {
-    const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
     for (let i = 0; i < Math.floor(radius); i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = Math.random() * (radius - 0.5);
-      const lilyGeo = new THREE.CircleGeometry(0.25, 6);
-      const lily = new THREE.Mesh(lilyGeo, toon(C.L5_LILY));
-      lily.rotation.x = -Math.PI / 2;
+      const lily = MeshBuilder.CreateDisc(`lily_${i}`, { radius: 0.25, tessellation: 6 }, scene);
+      lily.material = toonMat(`lilyMat_${i}`, C.L5_LILY, scene);
+      lily.rotation.x = Math.PI / 2;
       lily.position.set(
         x + Math.cos(angle) * dist,
         y + 0.1,
-        z + Math.sin(angle) * dist
+        z + Math.sin(angle) * dist,
       );
       lily.rotation.z = Math.random() * Math.PI;
-      scene.add(lily);
 
       // Occasional flower on lily pad
       if (Math.random() > 0.6) {
-        const flowerGeo = new THREE.SphereGeometry(0.08, 4, 4);
-        const flower = new THREE.Mesh(flowerGeo, toon(0xff88cc));
-        flower.position.copy(lily.position);
-        flower.position.y += 0.15;
-        scene.add(flower);
+        const flower = MeshBuilder.CreateSphere(`flower_${i}`, { diameter: 0.08 * 2, segments: 4 }, scene);
+        flower.material = toonMat(`flowerMat_${i}`, 0xff88cc, scene);
+        flower.position.set(lily.position.x, y + 0.15, lily.position.z);
       }
     }
   }
 }
 
 function createHangingVines(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
   const count = 2 + Math.floor(Math.random() * 3);
 
   for (let i = 0; i < count; i++) {
     const vineLength = randomRange(1.5, 4);
-    const vineGeo = new THREE.CylinderGeometry(0.02, 0.02, vineLength, 4);
-    const vine = new THREE.Mesh(vineGeo, toon(C.L5_VINE));
+    const vine = MeshBuilder.CreateCylinder(
+      `vine_${i}`,
+      { diameterTop: 0.02 * 2, diameterBottom: 0.02 * 2, height: vineLength, tessellation: 4 },
+      scene,
+    );
+    vine.material = toonMat(`vineMat_${i}`, C.L5_VINE, scene);
     vine.position.set(
       x + randomRange(-0.5, 0.5),
       y + 3 - vineLength / 2,
-      z + randomRange(-0.5, 0.5)
+      z + randomRange(-0.5, 0.5),
     );
     vine.rotation.z = randomRange(-0.2, 0.2);
-    scene.add(vine);
 
     // Small leaf at the end
-    const leafGeo = new THREE.SphereGeometry(0.06, 3, 3);
-    const leaf = new THREE.Mesh(leafGeo, toon(C.L5_TREE_LEAVES));
+    const leaf = MeshBuilder.CreateSphere(`vineLeaf_${i}`, { diameter: 0.06 * 2, segments: 3 }, scene);
+    leaf.material = toonMat(`vineLeafMat_${i}`, C.L5_TREE_LEAVES, scene);
     leaf.position.set(vine.position.x, y + 3 - vineLength, vine.position.z);
-    scene.add(leaf);
   }
 }
 
-export function createLevel5(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel5(scene: Scene, physics: PhysicsWorld): LevelData {
   // Heavy swamp fog
-  scene.fog = new THREE.FogExp2(C.L5_FOG, 0.02);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.02;
+  scene.fogColor = hexColor(C.L5_FOG);
 
   // Skybox (murky green-grey)
-  const sky = new Skybox(C.L5_SKY_TOP, C.L5_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  new Skybox(C.L5_SKY_TOP, C.L5_SKY_BOTTOM, scene);
 
   // Lighting (dim, greenish)
-  const ambientLight = new THREE.AmbientLight(0x445533, 0.35);
-  scene.add(ambientLight);
+  scene.ambientColor = new Color3(
+    ((0x445533 >> 16) & 0xff) / 255 * 0.35,
+    ((0x445533 >> 8) & 0xff) / 255 * 0.35,
+    (0x445533 & 0xff) / 255 * 0.35,
+  );
 
-  const dirLight = new THREE.DirectionalLight(0x99aa77, 0.6);
-  dirLight.position.set(8, 20, -5);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 100;
-  dirLight.shadow.camera.left = -45;
-  dirLight.shadow.camera.right = 45;
-  dirLight.shadow.camera.top = 45;
-  dirLight.shadow.camera.bottom = -45;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(-8, -20, 5), scene);
+  dirLight.diffuse = hexColor(0x99aa77);
+  dirLight.intensity = 0.6;
 
   // Swamp firefly point lights
   for (let i = 0; i < 10; i++) {
-    const light = new THREE.PointLight(0xaaff44, 0.3, 6);
-    light.position.set(randomRange(-35, 35), 2, randomRange(-35, 35));
-    scene.add(light);
+    const light = new PointLight(`firefly_${i}`, new Vector3(randomRange(-35, 35), 2, randomRange(-35, 35)), scene);
+    light.diffuse = hexColor(0xaaff44);
+    light.intensity = 0.3;
+    light.range = 6;
   }
 
   // Terrain (flat and swampy)
-  const terrain = new Terrain({
-    width: 95,
-    depth: 95,
-    segments: 47,
-    heightScale: 2,
-    color: C.L5_GROUND,
-    colorDark: C.L5_GROUND_DARK,
-    noiseScale: 0.03,
-  });
-  scene.add(terrain.mesh);
+  const terrain = new Terrain(
+    {
+      width: 95,
+      depth: 95,
+      segments: 47,
+      heightScale: 2,
+      color: C.L5_GROUND,
+      colorDark: C.L5_GROUND_DARK,
+      noiseScale: 0.03,
+    },
+    scene,
+  );
   terrain.initPhysics(physics);
 
   // Twisted swamp trees (dense, gnarled)
-  const veg = new Vegetation({
-    trunkColor: C.L5_TREE_TRUNK,
-    leavesColor: C.L5_TREE_LEAVES,
-    count: 45,
-    areaSize: 85,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-    minScale: 0.7,
-    maxScale: 1.8,
-  });
-  scene.add(veg.group);
+  new Vegetation(
+    {
+      trunkColor: C.L5_TREE_TRUNK,
+      leavesColor: C.L5_TREE_LEAVES,
+      count: 45,
+      areaSize: 85,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+      minScale: 0.7,
+      maxScale: 1.8,
+    },
+    scene,
+  );
 
   // Hanging vines from some trees
   for (let i = 0; i < 20; i++) {
@@ -171,13 +172,15 @@ export function createLevel5(physics: PhysicsWorld): LevelData {
   }
 
   // Mossy rocks
-  const rocks = new Rocks({
-    color: 0x4a5a3a,
-    count: 25,
-    areaSize: 85,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  new Rocks(
+    {
+      color: 0x4a5a3a,
+      count: 25,
+      areaSize: 85,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
   // Enemies: 5 pigs (hide in fog) + 4 rabbits (ambush from bushes)
   const enemies: Enemy[] = [];
@@ -189,7 +192,6 @@ export function createLevel5(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -201,7 +203,6 @@ export function createLevel5(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -210,7 +211,6 @@ export function createLevel5(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Porco do Pantano';
   const bossY = terrain.getHeightAt(-30, -30) + 4;
   boss.initPhysics(physics, -30, bossY, -30, 1.0);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Swamp pool around boss area
@@ -222,9 +222,7 @@ export function createLevel5(physics: PhysicsWorld): LevelData {
     const x = randomRange(-35, 35);
     const z = randomRange(-35, 35);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
-    biscuits.push(biscuit);
+    biscuits.push(new Biscuit(x, y, z, scene));
   }
 
   const spawnY = terrain.getHeightAt(0, 0) + 3;

@@ -1,57 +1,47 @@
-import * as THREE from 'three';
-import { clamp, smoothDamp } from '../utils/math';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 
 export class CameraSystem {
-  camera: THREE.PerspectiveCamera;
-  private distance = 10;
-  private theta = 0;
-  private phi = 0.5;
-  private readonly PHI_MIN = 0.15;
-  private readonly PHI_MAX = Math.PI * 0.45;
-  private currentPos = new THREE.Vector3();
-  private targetLookAt = new THREE.Vector3();
+  camera: ArcRotateCamera;
+  private target = Vector3.Zero();
 
-  constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
-    this.camera.position.set(0, 8, 12);
+  constructor(scene: Scene) {
+    this.camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3, 12, Vector3.Zero(), scene);
+    this.camera.minZ = 0.1;
+    this.camera.maxZ = 500;
+    this.camera.lowerRadiusLimit = 5;
+    this.camera.upperRadiusLimit = 20;
+    this.camera.lowerBetaLimit = 0.3;
+    this.camera.upperBetaLimit = Math.PI / 2 - 0.1;
+    // Disable default input (we handle input manually)
+    this.camera.inputs.clear();
   }
 
-  update(target: THREE.Vector3, mouseDX: number, mouseDY: number, dt: number) {
-    this.theta -= mouseDX * 0.003;
-    this.phi = clamp(this.phi - mouseDY * 0.003, this.PHI_MIN, this.PHI_MAX);
-
-    const x = target.x + this.distance * Math.sin(this.theta) * Math.cos(this.phi);
-    const y = target.y + this.distance * Math.sin(this.phi) + 2;
-    const z = target.z + this.distance * Math.cos(this.theta) * Math.cos(this.phi);
-
-    const desiredPos = new THREE.Vector3(x, y, z);
-
-    this.currentPos.x = smoothDamp(this.currentPos.x, desiredPos.x, 8, dt);
-    this.currentPos.y = smoothDamp(this.currentPos.y, desiredPos.y, 8, dt);
-    this.currentPos.z = smoothDamp(this.currentPos.z, desiredPos.z, 8, dt);
-
-    this.camera.position.copy(this.currentPos);
-
-    this.targetLookAt.lerp(target.clone().add(new THREE.Vector3(0, 1.5, 0)), 0.1);
-    this.camera.lookAt(this.targetLookAt);
+  get forwardXZ(): Vector3 {
+    const alpha = this.camera.alpha;
+    return new Vector3(Math.sin(alpha), 0, Math.cos(alpha)).normalize();
   }
 
-  get forwardXZ(): THREE.Vector3 {
-    const dir = new THREE.Vector3(
-      -Math.sin(this.theta),
-      0,
-      -Math.cos(this.theta)
-    ).normalize();
-    return dir;
+  get rightXZ(): Vector3 {
+    const alpha = this.camera.alpha;
+    return new Vector3(Math.cos(alpha), 0, -Math.sin(alpha)).normalize();
   }
 
-  get rightXZ(): THREE.Vector3 {
-    const forward = this.forwardXZ;
-    return new THREE.Vector3(-forward.z, 0, forward.x);
+  update(playerPos: Vector3, mouseDX: number, mouseDY: number, _dt: number) {
+    // Rotate camera
+    this.camera.alpha -= mouseDX * 0.003;
+    this.camera.beta -= mouseDY * 0.003;
+    // Clamp beta
+    this.camera.beta = Math.max(this.camera.lowerBetaLimit!, Math.min(this.camera.upperBetaLimit!, this.camera.beta));
+
+    // Smoothly follow player
+    const targetPos = new Vector3(playerPos.x, playerPos.y + 1.5, playerPos.z);
+    Vector3.LerpToRef(this.target, targetPos, 0.1, this.target);
+    this.camera.setTarget(this.target);
   }
 
-  resize(aspect: number) {
-    this.camera.aspect = aspect;
-    this.camera.updateProjectionMatrix();
+  resize(_aspectRatio: number) {
+    // ArcRotateCamera handles this automatically
   }
 }

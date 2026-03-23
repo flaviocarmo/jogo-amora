@@ -1,49 +1,55 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 
 interface Particle {
-  mesh: THREE.Mesh;
-  velocity: THREE.Vector3;
+  mesh: Mesh;
+  velocity: Vector3;
   life: number;
   maxLife: number;
 }
 
 export class ParticleSystem {
+  private scene: Scene;
   private particles: Particle[] = [];
-  private group: THREE.Group;
 
-  constructor(scene: THREE.Scene) {
-    this.group = new THREE.Group();
-    scene.add(this.group);
+  constructor(scene: Scene) {
+    this.scene = scene;
   }
 
-  emit(position: THREE.Vector3, color: number, count: number, speed = 5) {
+  emit(position: Vector3, color: number, count: number, speed = 5) {
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
+      const mesh = MeshBuilder.CreateBox('particle', { size: 0.1 }, this.scene);
+      const mat = new StandardMaterial('pmat', this.scene);
+      mat.emissiveColor = Color3.FromHexString('#' + color.toString(16).padStart(6, '0'));
+      mat.disableLighting = true;
+      mat.alpha = 1;
+      mesh.material = mat;
+      mesh.position.copyFrom(position);
 
-      const velocity = new THREE.Vector3(
+      const velocity = new Vector3(
         (Math.random() - 0.5) * speed,
         Math.random() * speed * 0.8 + 2,
-        (Math.random() - 0.5) * speed
+        (Math.random() - 0.5) * speed,
       );
 
       const life = 0.5 + Math.random() * 0.5;
       this.particles.push({ mesh, velocity, life, maxLife: life });
-      this.group.add(mesh);
     }
   }
 
-  emitStars(position: THREE.Vector3, count = 5) {
+  emitStars(position: Vector3, count = 8) {
     this.emit(position, 0xffdd00, count, 4);
   }
 
-  emitDamage(position: THREE.Vector3) {
-    this.emit(position, 0xff4444, 8, 3);
+  emitDamage(position: Vector3) {
+    this.emit(position, 0xff4444, 6, 3);
   }
 
-  emitHeal(position: THREE.Vector3) {
+  emitHeal(position: Vector3) {
     this.emit(position, 0x44ff44, 6, 3);
   }
 
@@ -51,30 +57,27 @@ export class ParticleSystem {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
+
       if (p.life <= 0) {
-        this.group.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
+        p.mesh.dispose();
         this.particles.splice(i, 1);
         continue;
       }
 
-      p.velocity.y -= 10 * dt; // Gravity
-      p.mesh.position.add(p.velocity.clone().multiplyScalar(dt));
+      p.velocity.y -= 10 * dt; // gravity
+      p.mesh.position.addInPlace(p.velocity.scale(dt));
       p.mesh.rotation.x += dt * 5;
       p.mesh.rotation.y += dt * 3;
 
       const alpha = p.life / p.maxLife;
-      (p.mesh.material as THREE.MeshBasicMaterial).opacity = alpha;
-      p.mesh.scale.setScalar(alpha);
+      p.mesh.scaling.setAll(alpha);
+      (p.mesh.material as StandardMaterial).alpha = alpha;
     }
   }
 
   clear() {
     for (const p of this.particles) {
-      this.group.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      (p.mesh.material as THREE.Material).dispose();
+      p.mesh.dispose();
     }
     this.particles = [];
   }

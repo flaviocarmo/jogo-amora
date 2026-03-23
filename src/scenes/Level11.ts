@@ -1,19 +1,28 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Terrain } from '../world/Terrain';
 import { Vegetation } from '../world/Vegetation';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
-import { Rabbit } from '../entities/enemies/Rabbit';
-import { Pig } from '../entities/enemies/Pig';
-import { Cat } from '../entities/enemies/Cat';
-import { Rat } from '../entities/enemies/Rat';
-import { Chicken } from '../entities/enemies/Chicken';
 import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
 import { randomRange } from '../utils/math';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import type { LevelData } from './Level1';
+
+import { Rabbit } from '../entities/enemies/Rabbit';
+import { Pig } from '../entities/enemies/Pig';
+import { Cat } from '../entities/enemies/Cat';
+import { Rat } from '../entities/enemies/Rat';
+import { Chicken } from '../entities/enemies/Chicken';
 
 /**
  * Level 11: Cemiterio Sombrio
@@ -23,114 +32,141 @@ import type { LevelData } from './Level1';
  */
 
 function createTombstone(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   rotation = 0
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('tombstone', scene);
+  root.position.set(x, y, z);
+  root.rotation.y = rotation;
 
   // Main tombstone slab
-  const slabGeo = new THREE.BoxGeometry(0.8, 1.4, 0.18);
-  const slab = new THREE.Mesh(slabGeo, toon(C.L11_TOMBSTONE));
-  slab.position.y = 0.7;
-  slab.castShadow = true;
-  group.add(slab);
+  const slab = MeshBuilder.CreateBox('tombstoneSlab', {
+    width: 0.8,
+    height: 1.4,
+    depth: 0.18,
+  }, scene);
+  slab.position.set(0, 0.7, 0);
+  slab.material = toonMat('tombstoneMat', C.L11_TOMBSTONE, scene);
+  slab.parent = root;
 
   // Rounded top arch (smaller box on top of slab)
-  const archGeo = new THREE.BoxGeometry(0.8, 0.35, 0.2);
-  const arch = new THREE.Mesh(archGeo, toon(C.L11_TOMBSTONE));
-  arch.position.y = 1.55;
-  group.add(arch);
+  const arch = MeshBuilder.CreateBox('tombstoneArch', {
+    width: 0.8,
+    height: 0.35,
+    depth: 0.2,
+  }, scene);
+  arch.position.set(0, 1.55, 0);
+  arch.material = toonMat('tombstoneArchMat', C.L11_TOMBSTONE, scene);
+  arch.parent = root;
 
-  // Cross on top
-  const crossVGeo = new THREE.BoxGeometry(0.08, 0.5, 0.1);
-  const crossV = new THREE.Mesh(crossVGeo, toon(0x666666));
-  crossV.position.y = 1.85;
-  group.add(crossV);
+  // Cross vertical bar
+  const crossV = MeshBuilder.CreateBox('crossV', {
+    width: 0.08,
+    height: 0.5,
+    depth: 0.1,
+  }, scene);
+  crossV.position.set(0, 1.85, 0);
+  crossV.material = toonMat('crossMat', 0x666666, scene);
+  crossV.parent = root;
 
-  const crossHGeo = new THREE.BoxGeometry(0.35, 0.08, 0.1);
-  const crossH = new THREE.Mesh(crossHGeo, toon(0x666666));
-  crossH.position.y = 2.0;
-  group.add(crossH);
+  // Cross horizontal bar
+  const crossH = MeshBuilder.CreateBox('crossH', {
+    width: 0.35,
+    height: 0.08,
+    depth: 0.1,
+  }, scene);
+  crossH.position.set(0, 2.0, 0);
+  crossH.material = toonMat('crossHMat', 0x666666, scene);
+  crossH.parent = root;
 
   // Eerie green light near tombstone
-  const eerieLight = new THREE.PointLight(0x44ff66, 0.5, 5);
-  eerieLight.position.set(0, 1.0, 0.3);
-  group.add(eerieLight);
-
-  group.position.set(x, y, z);
-  group.rotation.y = rotation;
-  scene.add(group);
+  const eerieLight = new PointLight('eerieLight', new Vector3(x, y + 1.0, z + 0.3), scene);
+  eerieLight.diffuse = hexColor(0x44ff66);
+  eerieLight.intensity = 0.5;
+  eerieLight.range = 5;
 }
 
 function createIronFence(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   length: number, rotation = 0
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('ironFence', scene);
+  root.position.set(x, y, z);
+  root.rotation.y = rotation;
 
-  // Horizontal rail
-  const railGeo = new THREE.BoxGeometry(length, 0.06, 0.06);
-  const rail = new THREE.Mesh(railGeo, toon(C.L11_FENCE));
-  rail.position.y = 0.8;
-  group.add(rail);
+  // Horizontal rail top
+  const rail = MeshBuilder.CreateBox('fenceRail', {
+    width: length,
+    height: 0.06,
+    depth: 0.06,
+  }, scene);
+  rail.position.set(0, 0.8, 0);
+  rail.material = toonMat('fenceMat', C.L11_FENCE, scene);
+  rail.parent = root;
 
-  const rail2 = new THREE.Mesh(railGeo, toon(C.L11_FENCE));
-  rail2.position.y = 0.4;
-  group.add(rail2);
+  // Horizontal rail middle
+  const rail2 = MeshBuilder.CreateBox('fenceRail2', {
+    width: length,
+    height: 0.06,
+    depth: 0.06,
+  }, scene);
+  rail2.position.set(0, 0.4, 0);
+  rail2.material = toonMat('fenceMat2', C.L11_FENCE, scene);
+  rail2.parent = root;
 
-  // Vertical fence posts / spikes
+  // Vertical fence posts and spikes
   const postCount = Math.floor(length / 0.6) + 1;
   for (let i = 0; i < postCount; i++) {
     const px = -length / 2 + i * (length / (postCount - 1));
 
-    const postGeo = new THREE.BoxGeometry(0.06, 1.0, 0.06);
-    const post = new THREE.Mesh(postGeo, toon(C.L11_FENCE));
+    const post = MeshBuilder.CreateBox('fencePost' + i, {
+      width: 0.06,
+      height: 1.0,
+      depth: 0.06,
+    }, scene);
     post.position.set(px, 0.5, 0);
-    group.add(post);
+    post.material = toonMat('fencePostMat', C.L11_FENCE, scene);
+    post.parent = root;
 
-    // Spike tip
-    const spikeGeo = new THREE.ConeGeometry(0.05, 0.2, 4);
-    const spike = new THREE.Mesh(spikeGeo, toon(C.L11_FENCE));
+    // Spike tip (cone)
+    const spike = MeshBuilder.CreateCylinder('fenceSpike' + i, {
+      diameterTop: 0,
+      diameterBottom: 0.05 * 2,
+      height: 0.2,
+      tessellation: 4,
+    }, scene);
     spike.position.set(px, 1.1, 0);
-    group.add(spike);
+    spike.material = toonMat('fenceSpikeMat', C.L11_FENCE, scene);
+    spike.parent = root;
   }
-
-  group.position.set(x, y, z);
-  group.rotation.y = rotation;
-  scene.add(group);
 }
 
-export function createLevel11(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel11(scene: Scene, physics: PhysicsWorld): LevelData {
   // Heavy exponential fog for graveyard atmosphere
-  scene.fog = new THREE.FogExp2(C.L11_FOG, 0.02);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.02;
+  scene.fogColor = hexColor(C.L11_FOG);
 
   // Skybox (near-black night sky)
-  const sky = new Skybox(C.L11_SKY_TOP, C.L11_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  const sky = new Skybox(C.L11_SKY_TOP, C.L11_SKY_BOTTOM, scene);
 
-  // Dim moonlight
-  const hemiLight = new THREE.HemisphereLight(C.L11_SKY_TOP, C.L11_GROUND_DARK, 0.3);
-  scene.add(hemiLight);
+  // Dim moonlight via hemisphere light
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(C.L11_SKY_TOP);
+  hemiLight.groundColor = hexColor(C.L11_GROUND_DARK);
+  hemiLight.intensity = 0.3;
 
-  const ambientLight = new THREE.AmbientLight(0x111122, 0.2);
-  scene.add(ambientLight);
+  // Very dim ambient
+  const ambientDir = new DirectionalLight('ambDir', new Vector3(0, -1, 0), scene);
+  ambientDir.diffuse = hexColor(0x111122);
+  ambientDir.intensity = 0.2;
 
-  const dirLight = new THREE.DirectionalLight(0x8888cc, 0.5);
-  dirLight.position.set(10, 30, -15);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 120;
-  dirLight.shadow.camera.left = -50;
-  dirLight.shadow.camera.right = 50;
-  dirLight.shadow.camera.top = 50;
-  dirLight.shadow.camera.bottom = -50;
-  scene.add(dirLight);
+  // Moonlight directional
+  const dirLight = new DirectionalLight('dir', new Vector3(-10, -30, 15).normalize(), scene);
+  dirLight.diffuse = hexColor(0x8888cc);
+  dirLight.intensity = 0.5;
 
   // Terrain (undulating graveyard ground)
   const terrain = new Terrain({
@@ -141,8 +177,7 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     color: C.L11_GROUND,
     colorDark: C.L11_GROUND_DARK,
     noiseScale: 0.04,
-  });
-  scene.add(terrain.mesh);
+  }, scene);
   terrain.initPhysics(physics);
 
   // Tombstones scattered across the graveyard
@@ -186,8 +221,7 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     minScale: 0.6,
     maxScale: 1.1,
     treeType: 'dead',
-  });
-  scene.add(deadTrees.group);
+  }, scene);
 
   // Dark rocks among the graves
   const rocks = new Rocks({
@@ -195,8 +229,7 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     count: 25,
     areaSize: 88,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  }, scene);
 
   // Enemies: ALL types present in the graveyard
   const enemies: Enemy[] = [];
@@ -208,7 +241,6 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const cat = new Cat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     cat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(cat.mesh);
     enemies.push(cat);
   }
 
@@ -219,7 +251,6 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const rat = new Rat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rat.mesh);
     enemies.push(rat);
   }
 
@@ -230,7 +261,6 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const chicken = new Chicken(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     chicken.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(chicken.mesh);
     enemies.push(chicken);
   }
 
@@ -241,7 +271,6 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -250,7 +279,6 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Rato Fantasma';
   const bossY = terrain.getHeightAt(-30, 30) + 4;
   boss.initPhysics(physics, -30, bossY, 30, 1.0);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Eerie torches around boss area
@@ -260,14 +288,17 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const tz = 30 + Math.sin(angle) * 5;
     const ty = terrain.getHeightAt(tx, tz);
 
-    const spookLight = new THREE.PointLight(0x44ff66, 0.7, 8);
-    spookLight.position.set(tx, ty + 2.5, tz);
-    scene.add(spookLight);
+    const spookLight = new PointLight('spookLight' + i, new Vector3(tx, ty + 2.5, tz), scene);
+    spookLight.diffuse = hexColor(0x44ff66);
+    spookLight.intensity = 0.7;
+    spookLight.range = 8;
 
-    const glowGeo = new THREE.SphereGeometry(0.12, 4, 4);
-    const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ color: 0x44ff66 }));
-    glow.position.copy(spookLight.position);
-    scene.add(glow);
+    const glow = MeshBuilder.CreateSphere('spookGlow' + i, {
+      diameter: 0.12 * 2,
+      segments: 4,
+    }, scene);
+    glow.position.set(tx, ty + 2.5, tz);
+    glow.material = basicMat('spookGlowMat' + i, 0x44ff66, scene);
   }
 
   // Biscuits (5 scattered among the graves)
@@ -276,8 +307,7 @@ export function createLevel11(physics: PhysicsWorld): LevelData {
     const x = randomRange(-30, 30);
     const z = randomRange(-30, 30);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
+    const biscuit = new Biscuit(x, y, z, scene);
     biscuits.push(biscuit);
   }
 

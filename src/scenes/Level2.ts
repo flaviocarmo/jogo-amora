@@ -1,4 +1,9 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
 import { Terrain } from '../world/Terrain';
 import { Vegetation } from '../world/Vegetation';
 import { Rocks } from '../world/Rocks';
@@ -9,78 +14,83 @@ import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
+import { hexColor } from '../utils/materials';
 import { randomRange } from '../utils/math';
 import type { LevelData } from './Level1';
 
-export function createLevel2(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel2(scene: Scene, physics: PhysicsWorld): LevelData {
   // Fog for dark forest atmosphere
-  scene.fog = new THREE.FogExp2(C.L2_FOG, 0.015);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.015;
+  scene.fogColor = hexColor(C.L2_FOG);
 
   // Skybox
-  const sky = new Skybox(C.L2_SKY_TOP, C.L2_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  new Skybox(C.L2_SKY_TOP, C.L2_SKY_BOTTOM, scene);
 
   // Lighting (dimmer)
-  const hemiLight = new THREE.HemisphereLight(C.L2_SKY_TOP, C.L2_GRASS_DARK, 0.4);
-  scene.add(hemiLight);
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(C.L2_SKY_TOP);
+  hemiLight.groundColor = hexColor(C.L2_GRASS_DARK);
+  hemiLight.intensity = 0.4;
 
-  const ambientLight = new THREE.AmbientLight(0x334466, 0.2);
-  scene.add(ambientLight);
+  scene.ambientColor = new Color3(
+    ((0x334466 >> 16) & 0xff) / 255,
+    ((0x334466 >> 8) & 0xff) / 255,
+    (0x334466 & 0xff) / 255,
+  );
 
-  const dirLight = new THREE.DirectionalLight(0x88aacc, 0.8);
-  dirLight.position.set(10, 25, -10);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 100;
-  dirLight.shadow.camera.left = -40;
-  dirLight.shadow.camera.right = 40;
-  dirLight.shadow.camera.top = 40;
-  dirLight.shadow.camera.bottom = -40;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(-10, -25, 10), scene);
+  dirLight.diffuse = hexColor(0x88aacc);
+  dirLight.intensity = 0.8;
 
   // Point lights for atmosphere (fireflies)
   for (let i = 0; i < 6; i++) {
-    const light = new THREE.PointLight(0x88ff88, 0.5, 10);
-    light.position.set(randomRange(-30, 30), 3, randomRange(-30, 30));
-    scene.add(light);
+    const light = new PointLight(`firefly_${i}`, new Vector3(randomRange(-30, 30), 3, randomRange(-30, 30)), scene);
+    light.diffuse = hexColor(0x88ff88);
+    light.intensity = 0.5;
+    light.range = 10;
   }
 
   // Terrain
-  const terrain = new Terrain({
-    width: 90,
-    depth: 90,
-    segments: 45,
-    heightScale: 4,
-    color: C.L2_GRASS,
-    colorDark: C.L2_GRASS_DARK,
-    noiseScale: 0.04,
-  });
-  scene.add(terrain.mesh);
+  const terrain = new Terrain(
+    {
+      width: 90,
+      depth: 90,
+      segments: 45,
+      heightScale: 4,
+      color: C.L2_GRASS,
+      colorDark: C.L2_GRASS_DARK,
+      noiseScale: 0.04,
+    },
+    scene,
+  );
   terrain.initPhysics(physics);
 
   // Dense forest
-  const veg = new Vegetation({
-    trunkColor: C.L2_TREE_TRUNK,
-    leavesColor: C.L2_TREE_LEAVES,
-    count: 60,
-    areaSize: 80,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-    minScale: 0.8,
-    maxScale: 2.0,
-    treeType: 'pine',
-  });
-  scene.add(veg.group);
+  new Vegetation(
+    {
+      trunkColor: C.L2_TREE_TRUNK,
+      leavesColor: C.L2_TREE_LEAVES,
+      count: 60,
+      areaSize: 80,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+      minScale: 0.8,
+      maxScale: 2.0,
+      treeType: 'pine',
+    },
+    scene,
+  );
 
   // Rocks (mossy-looking)
-  const rocks = new Rocks({
-    color: 0x445544,
-    count: 25,
-    areaSize: 80,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  new Rocks(
+    {
+      color: 0x445544,
+      count: 25,
+      areaSize: 80,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
   // Enemies: 4 pigs + 3 rabbits
   const enemies: Enemy[] = [];
@@ -92,7 +102,6 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
     const pig = new Pig(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     pig.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(pig.mesh);
     enemies.push(pig);
   }
 
@@ -103,7 +112,6 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -111,7 +119,6 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
   const boss = new Pig(-30, -30, true);
   const bossY = terrain.getHeightAt(-30, -30) + 3;
   boss.initPhysics(physics, -30, bossY, -30, 0.9);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Biscuits
@@ -120,9 +127,7 @@ export function createLevel2(physics: PhysicsWorld): LevelData {
     const x = randomRange(-35, 35);
     const z = randomRange(-35, 35);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
-    biscuits.push(biscuit);
+    biscuits.push(new Biscuit(x, y, z, scene));
   }
 
   const spawnY = terrain.getHeightAt(0, 0) + 3;

@@ -1,4 +1,8 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { Terrain } from '../world/Terrain';
 import { Vegetation } from '../world/Vegetation';
 import { Rocks } from '../world/Rocks';
@@ -8,10 +12,11 @@ import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
+import { hexColor } from '../utils/materials';
 import { randomRange } from '../utils/math';
 
 export interface LevelData {
-  scene: THREE.Scene;
+  scene: Scene;
   terrain: Terrain;
   enemies: Enemy[];
   biscuits: Biscuit[];
@@ -20,63 +25,60 @@ export interface LevelData {
   boss: Enemy | null;
 }
 
-export function createLevel1(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel1(scene: Scene, physics: PhysicsWorld): LevelData {
   // Skybox
-  const sky = new Skybox(C.L1_SKY_TOP, C.L1_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  new Skybox(C.L1_SKY_TOP, C.L1_SKY_BOTTOM, scene);
 
   // Lighting
-  const hemiLight = new THREE.HemisphereLight(C.L1_SKY_TOP, C.L1_GRASS_DARK, 0.6);
-  scene.add(hemiLight);
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(C.L1_SKY_TOP);
+  hemiLight.groundColor = hexColor(C.L1_GRASS_DARK);
+  hemiLight.intensity = 0.6;
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-  scene.add(ambientLight);
+  scene.ambientColor = new Color3(1, 1, 1);
 
-  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
-  dirLight.position.set(20, 30, 20);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 100;
-  dirLight.shadow.camera.left = -40;
-  dirLight.shadow.camera.right = 40;
-  dirLight.shadow.camera.top = 40;
-  dirLight.shadow.camera.bottom = -40;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(-20, -30, -20), scene);
+  dirLight.diffuse = hexColor(0xffeedd);
+  dirLight.intensity = 1.2;
 
   // Terrain
-  const terrain = new Terrain({
-    width: 80,
-    depth: 80,
-    segments: 40,
-    heightScale: 3,
-    color: C.L1_GRASS,
-    colorDark: C.L1_GRASS_DARK,
-    noiseScale: 0.05,
-  });
-  scene.add(terrain.mesh);
+  const terrain = new Terrain(
+    {
+      width: 80,
+      depth: 80,
+      segments: 40,
+      heightScale: 3,
+      color: C.L1_GRASS,
+      colorDark: C.L1_GRASS_DARK,
+      noiseScale: 0.05,
+    },
+    scene,
+  );
   terrain.initPhysics(physics);
 
   // Trees
-  const veg = new Vegetation({
-    trunkColor: C.L1_TREE_TRUNK,
-    leavesColor: C.L1_TREE_LEAVES,
-    count: 30,
-    areaSize: 70,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-    treeType: 'oak',
-  });
-  scene.add(veg.group);
+  new Vegetation(
+    {
+      trunkColor: C.L1_TREE_TRUNK,
+      leavesColor: C.L1_TREE_LEAVES,
+      count: 30,
+      areaSize: 70,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+      treeType: 'oak',
+    },
+    scene,
+  );
 
   // Rocks
-  const rocks = new Rocks({
-    color: C.L1_ROCK,
-    count: 20,
-    areaSize: 70,
-    getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  new Rocks(
+    {
+      color: C.L1_ROCK,
+      count: 20,
+      areaSize: 70,
+      getHeight: (x, z) => terrain.getHeightAt(x, z),
+    },
+    scene,
+  );
 
   // Enemies: 5 rabbits
   const enemies: Enemy[] = [];
@@ -88,7 +90,6 @@ export function createLevel1(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -96,7 +97,6 @@ export function createLevel1(physics: PhysicsWorld): LevelData {
   const boss = new Rabbit(30, 30, true);
   const bossY = terrain.getHeightAt(30, 30) + 3;
   boss.initPhysics(physics, 30, bossY, 30, 0.8);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Biscuits
@@ -105,9 +105,7 @@ export function createLevel1(physics: PhysicsWorld): LevelData {
     const x = randomRange(-30, 30);
     const z = randomRange(-30, 30);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
-    biscuits.push(biscuit);
+    biscuits.push(new Biscuit(x, y, z, scene));
   }
 
   const spawnY = terrain.getHeightAt(0, 0) + 3;

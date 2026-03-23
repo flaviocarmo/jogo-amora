@@ -1,15 +1,24 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
-import { Cat } from '../entities/enemies/Cat';
-import { Rat } from '../entities/enemies/Rat';
 import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
 import { randomRange } from '../utils/math';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import type { LevelData } from './Level1';
+
+import { Cat } from '../entities/enemies/Cat';
+import { Rat } from '../entities/enemies/Rat';
 
 /**
  * Level 8: Cidade Abandonada
@@ -19,110 +28,118 @@ import type { LevelData } from './Level1';
  */
 
 function createBuilding(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   width: number, height: number, depth: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('building', scene);
+  root.position.set(x, y, z);
 
   // Main building body
-  const bodyGeo = new THREE.BoxGeometry(width, height, depth);
-  const body = new THREE.Mesh(bodyGeo, toon(C.L8_BUILDING));
-  body.position.y = height / 2;
-  body.castShadow = true;
-  body.receiveShadow = true;
-  group.add(body);
+  const body = MeshBuilder.CreateBox('buildingBody', {
+    width,
+    height,
+    depth,
+  }, scene);
+  body.position.set(0, height / 2, 0);
+  body.material = toonMat('buildingMat', C.L8_BUILDING, scene);
+  body.parent = root;
 
   // Darker roof slab
-  const roofGeo = new THREE.BoxGeometry(width + 0.3, 0.3, depth + 0.3);
-  const roof = new THREE.Mesh(roofGeo, toon(C.L8_BUILDING_DARK));
-  roof.position.y = height + 0.15;
-  roof.castShadow = true;
-  group.add(roof);
+  const roof = MeshBuilder.CreateBox('buildingRoof', {
+    width: width + 0.3,
+    height: 0.3,
+    depth: depth + 0.3,
+  }, scene);
+  roof.position.set(0, height + 0.15, 0);
+  roof.material = toonMat('buildingRoofMat', C.L8_BUILDING_DARK, scene);
+  roof.parent = root;
 
   // Window holes (dark squares on the facade)
   const windowRows = Math.max(1, Math.floor(height / 2));
   const windowCols = Math.max(1, Math.floor(width / 1.5));
   for (let row = 0; row < windowRows; row++) {
     for (let col = 0; col < windowCols; col++) {
-      const winGeo = new THREE.BoxGeometry(0.4, 0.5, 0.05);
-      const winMat = new THREE.MeshToonMaterial({ color: 0x111122 });
-      const win = new THREE.Mesh(winGeo, winMat);
+      const win = MeshBuilder.CreateBox('buildingWindow', {
+        width: 0.4,
+        height: 0.5,
+        depth: 0.05,
+      }, scene);
       win.position.set(
         (col - (windowCols - 1) / 2) * (width / windowCols),
         1.2 + row * 2.0,
         depth / 2 + 0.03
       );
-      group.add(win);
+      win.material = toonMat('windowMat', 0x111122, scene);
+      win.parent = root;
     }
   }
-
-  group.position.set(x, y, z);
-  scene.add(group);
 }
 
 function createStreetLight(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('streetLight', scene);
+  root.position.set(x, y, z);
 
   // Pole
-  const poleGeo = new THREE.CylinderGeometry(0.05, 0.07, 5, 5);
-  const pole = new THREE.Mesh(poleGeo, toon(0x666666));
-  pole.position.y = 2.5;
-  pole.castShadow = true;
-  group.add(pole);
+  const pole = MeshBuilder.CreateCylinder('lightPole', {
+    diameterTop: 0.05 * 2,
+    diameterBottom: 0.07 * 2,
+    height: 5,
+    tessellation: 5,
+  }, scene);
+  pole.position.set(0, 2.5, 0);
+  pole.material = toonMat('lightPoleMat', 0x666666, scene);
+  pole.parent = root;
 
   // Horizontal arm
-  const armGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.5, 4);
-  const arm = new THREE.Mesh(armGeo, toon(0x666666));
+  const arm = MeshBuilder.CreateCylinder('lightArm', {
+    diameter: 0.04 * 2,
+    height: 1.5,
+    tessellation: 4,
+  }, scene);
   arm.rotation.z = Math.PI / 2;
   arm.position.set(0.6, 5, 0);
-  group.add(arm);
+  arm.material = toonMat('lightArmMat', 0x666666, scene);
+  arm.parent = root;
 
   // Lamp housing
-  const lampGeo = new THREE.SphereGeometry(0.18, 6, 5);
-  const lamp = new THREE.Mesh(lampGeo, toon(0xffffcc));
+  const lamp = MeshBuilder.CreateSphere('lightLamp', {
+    diameter: 0.18 * 2,
+    segments: 6,
+  }, scene);
   lamp.position.set(1.3, 4.9, 0);
-  group.add(lamp);
+  lamp.material = toonMat('lightLampMat', 0xffffcc, scene);
+  lamp.parent = root;
 
   // Actual point light — dim orange-yellow like sodium vapor
-  const light = new THREE.PointLight(0xffaa44, 0.8, 12);
-  light.position.set(1.3, 4.8, 0);
-  group.add(light);
-
-  group.position.set(x, y, z);
-  scene.add(group);
+  const light = new PointLight('streetPointLight', new Vector3(x + 1.3, y + 4.8, z), scene);
+  light.diffuse = hexColor(0xffaa44);
+  light.intensity = 0.8;
+  light.range = 12;
 }
 
-export function createLevel8(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel8(scene: Scene, physics: PhysicsWorld): LevelData {
   // Oppressive urban fog
-  scene.fog = new THREE.FogExp2(C.L8_SKY_BOTTOM, 0.012);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.012;
+  scene.fogColor = hexColor(C.L8_SKY_BOTTOM);
 
   // Skybox (overcast city sky)
-  const sky = new Skybox(C.L8_SKY_TOP, C.L8_SKY_BOTTOM);
-  scene.add(sky.mesh);
+  const sky = new Skybox(C.L8_SKY_TOP, C.L8_SKY_BOTTOM, scene);
 
   // Dim ambient — city is gloomy
-  const ambientLight = new THREE.AmbientLight(0x334455, 0.3);
-  scene.add(ambientLight);
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(0x334455);
+  hemiLight.groundColor = hexColor(0x334455);
+  hemiLight.intensity = 0.3;
 
   // Weak directional (overcast light)
-  const dirLight = new THREE.DirectionalLight(0x667788, 0.5);
-  dirLight.position.set(0, 30, 10);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  dirLight.shadow.camera.far = 100;
-  dirLight.shadow.camera.left = -55;
-  dirLight.shadow.camera.right = 55;
-  dirLight.shadow.camera.top = 55;
-  dirLight.shadow.camera.bottom = -55;
-  scene.add(dirLight);
+  const dirLight = new DirectionalLight('dir', new Vector3(0, -30, -10).normalize(), scene);
+  dirLight.diffuse = hexColor(0x667788);
+  dirLight.intensity = 0.5;
 
   // Terrain (mostly flat urban ground)
   const terrain = new Terrain({
@@ -133,8 +150,7 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
     color: C.L8_GROUND,
     colorDark: C.L8_GROUND_DARK,
     noiseScale: 0.02,
-  });
-  scene.add(terrain.mesh);
+  }, scene);
   terrain.initPhysics(physics);
 
   // Buildings scattered across the city block
@@ -174,16 +190,14 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
     count: 30,
     areaSize: 90,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  }, scene);
 
   const rubble = new Rocks({
     color: C.L8_BUILDING_DARK,
     count: 20,
     areaSize: 90,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rubble.group);
+  }, scene);
 
   // Enemies: 4 cats (stalking in shadows) + 4 rats (fast in alleys)
   const enemies: Enemy[] = [];
@@ -195,7 +209,6 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
     const cat = new Cat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     cat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(cat.mesh);
     enemies.push(cat);
   }
 
@@ -207,7 +220,6 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
     const rat = new Rat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rat.mesh);
     enemies.push(rat);
   }
 
@@ -216,7 +228,6 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Gato das Sombras';
   const bossY = terrain.getHeightAt(-30, -30) + 3;
   boss.initPhysics(physics, -30, bossY, -30, 0.75);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
   // Tall dark buildings flanking the boss arena
@@ -236,8 +247,7 @@ export function createLevel8(physics: PhysicsWorld): LevelData {
     const x = randomRange(-38, 38);
     const z = randomRange(-38, 38);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
+    const biscuit = new Biscuit(x, y, z, scene);
     biscuits.push(biscuit);
   }
 

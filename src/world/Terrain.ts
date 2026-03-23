@@ -1,7 +1,12 @@
-import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import { Scene } from '@babylonjs/core/scene';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { createNoise2D } from 'simplex-noise';
 import { PhysicsWorld } from '../core/PhysicsWorld';
+import { hexColor } from '../utils/materials';
 
 export interface TerrainConfig {
   width: number;
@@ -14,84 +19,89 @@ export interface TerrainConfig {
 }
 
 export class Terrain {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   private heightData: Float32Array;
   private segments: number;
   private width: number;
   private depth: number;
 
-  constructor(config: TerrainConfig) {
+  constructor(config: TerrainConfig, scene: Scene) {
     this.segments = config.segments;
     this.width = config.width;
     this.depth = config.depth;
 
     const noise2D = createNoise2D();
-    const geometry = new THREE.PlaneGeometry(
-      config.width, config.depth,
-      config.segments, config.segments
+
+    // CreateGround produces an XZ plane with Y=up, matching the old rotated PlaneGeometry
+    this.mesh = MeshBuilder.CreateGround(
+      'terrain',
+      {
+        width: config.width,
+        height: config.depth, // "height" in CreateGround is the Z-axis extent
+        subdivisions: config.segments,
+        updatable: true,
+      },
+      scene,
     );
-    geometry.rotateX(-Math.PI / 2);
 
-    const positions = geometry.attributes.position;
-    const count = (config.segments + 1) * (config.segments + 1);
-    this.heightData = new Float32Array(count);
+    // --- Displace vertices with noise ---
+    const positions = this.mesh.getVerticesData(VertexBuffer.PositionKind)!;
+    const vertexCount = positions.length / 3;
+    this.heightData = new Float32Array(vertexCount);
 
-    for (let i = 0; i < positions.count; i++) {
-      const x = positions.getX(i);
-      const z = positions.getZ(i);
+    for (let i = 0; i < vertexCount; i++) {
+      const x = positions[i * 3];
+      const z = positions[i * 3 + 2];
       const ns = config.noiseScale;
       const height =
         noise2D(x * ns * 0.3, z * ns * 0.3) * config.heightScale +
         noise2D(x * ns, z * ns) * config.heightScale * 0.3 +
         noise2D(x * ns * 3, z * ns * 3) * config.heightScale * 0.08;
-      positions.setY(i, height);
+      positions[i * 3 + 1] = height;
       this.heightData[i] = height;
     }
 
-    geometry.computeVertexNormals();
+    this.mesh.updateVerticesData(VertexBuffer.PositionKind, positions);
 
-    // Vertex colors for variation
-    const colors = new Float32Array(positions.count * 3);
-    const c1 = new THREE.Color(config.color);
-    const c2 = new THREE.Color(config.colorDark);
-    for (let i = 0; i < positions.count; i++) {
-      const h = positions.getY(i);
+    // --- Vertex colors for height-based variation ---
+    const c1 = hexColor(config.color);
+    const c2 = hexColor(config.colorDark);
+    const colors = new Float32Array(vertexCount * 4); // Babylon uses RGBA vertex colors
+
+    for (let i = 0; i < vertexCount; i++) {
+      const h = positions[i * 3 + 1];
       const t = (h / config.heightScale + 1) * 0.5;
-      const c = c1.clone().lerp(c2, t);
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
+      const r = c1.r + (c2.r - c1.r) * t;
+      const g = c1.g + (c2.g - c1.g) * t;
+      const b = c1.b + (c2.b - c1.b) * t;
+      colors[i * 4] = r;
+      colors[i * 4 + 1] = g;
+      colors[i * 4 + 2] = b;
+      colors[i * 4 + 3] = 1.0;
     }
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.85,
-      metalness: 0.05,
-      flatShading: false,
-    });
+    this.mesh.setVerticesData(VertexBuffer.ColorKind, colors, true);
 
-    this.mesh = new THREE.Mesh(geometry, material);
-    this.mesh.receiveShadow = true;
+    // Recompute normals after displacement
+    this.mesh.createNormals(false);
+
+    // --- Material with vertex colors ---
+    const material = new StandardMaterial('terrainMat', scene);
+    material.diffuseColor = new Color3(1, 1, 1); // let vertex colors drive diffuse
+    material.specularColor = new Color3(0.05, 0.05, 0.05);
+    material.specularPower = 16;
+    // Enable vertex color support
+    material.useVertexColors = true;
+
+    this.mesh.material = material;
+    this.mesh.receiveShadows = true;
   }
 
-  initPhysics(physics: PhysicsWorld) {
-    // Use trimesh collider from the terrain geometry (more reliable than heightfield)
-    const geo = this.mesh.geometry;
-    const vertices = new Float32Array(geo.attributes.position.array);
-    const indicesAttr = geo.index;
-    if (!indicesAttr) return;
-    const indices = new Uint32Array(indicesAttr.array);
-
-    const bodyDesc = RAPIER.RigidBodyDesc.fixed();
-    const body = physics.createRigidBody(bodyDesc);
-    const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
-      .setFriction(1.0);
-    physics.createCollider(colliderDesc, body);
+  initPhysics(physics: PhysicsWorld): void {
+    physics.createStaticBody(this.mesh);
   }
 
   getHeightAt(x: number, z: number): number {
-    // Approximate height at world position
     const halfW = this.width / 2;
     const halfD = this.depth / 2;
     const nx = ((x + halfW) / this.width) * this.segments;

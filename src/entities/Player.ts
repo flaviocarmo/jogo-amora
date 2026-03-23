@@ -1,9 +1,17 @@
-import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsShapeCapsule } from '@babylonjs/core/Physics/v2/physicsShape';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Entity } from './Entity';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import { InputManager } from '../core/InputManager';
 import { CameraSystem } from '../systems/CameraSystem';
+import { toonMat, glossMat, basicMat } from '../utils/materials';
 import * as C from '../utils/colors';
 import { clamp } from '../utils/math';
 
@@ -26,174 +34,177 @@ export class Player extends Entity {
 
   // Animation
   private walkCycle = 0;
-  private legs: THREE.Group[] = []; 
-  private torsoGroup!: THREE.Group;
-  private headGroup!: THREE.Group;
-  private tailMesh!: THREE.Mesh; 
-  private mouthMesh!: THREE.Mesh;
+  private legs: TransformNode[] = [];
+  private torsoGroup!: TransformNode;
+  private headGroup!: TransformNode;
+  private tailMesh!: Mesh;
+  private mouthMesh!: Mesh;
 
   // Bark wave visual
-  barkWaveMesh: THREE.Mesh | null = null;
+  barkWaveMesh: Mesh | null = null;
   private barkWaveTimer = 0;
+
+  private scene: Scene | null = null;
+  private modelBuilt = false;
 
   constructor() {
     super(5);
-    this.buildModel();
   }
 
-  private buildModel() {
-    const toonMat = (color: number) => new THREE.MeshToonMaterial({ color });
-    const glossMat = (color: number) => new THREE.MeshPhongMaterial({ color, shininess: 100 });
+  private buildModel(scene: Scene) {
+    if (this.modelBuilt) return;
+    this.modelBuilt = true;
 
-    this.torsoGroup = new THREE.Group();
+    // --- TORSO GROUP ---
+    this.torsoGroup = new TransformNode('player-torso', scene);
     this.torsoGroup.position.set(0, 0.5, 0);
-    this.mesh.add(this.torsoGroup);
+    this.torsoGroup.parent = this.mesh;
 
-    // --- MANE/CHEST (The massive front fluff from the 3D reference) ---
-    // O peito enorme e peludo característico da foto
-    const maneGeo = new THREE.SphereGeometry(0.65, 16, 12);
-    const maneMesh = new THREE.Mesh(maneGeo, toonMat(C.AMORA_BODY));
-    maneMesh.scale.set(1.05, 1.0, 1.05); 
+    // --- MANE/CHEST ---
+    const maneMesh = MeshBuilder.CreateSphere('player-mane', { diameter: 1.3, segments: 16 }, scene);
+    maneMesh.material = toonMat('player-mane-mat', C.AMORA_BODY, scene);
+    maneMesh.scaling.set(1.05, 1.0, 1.05);
     maneMesh.position.set(0, 0.15, 0.15);
-    this.torsoGroup.add(maneMesh);
+    maneMesh.parent = this.torsoGroup;
 
-    // Mancha cinza no peito
-    const chestGeo = new THREE.SphereGeometry(0.4, 10, 8);
-    const chestMesh = new THREE.Mesh(chestGeo, toonMat(C.AMORA_CHEST));
-    chestMesh.scale.set(1.1, 0.9, 0.5);
-    chestMesh.position.set(0, 0.05, 0.65); // Na frente da juba
-    this.torsoGroup.add(chestMesh);
+    // Chest grey patch
+    const chestMesh = MeshBuilder.CreateSphere('player-chest', { diameter: 0.8, segments: 10 }, scene);
+    chestMesh.material = toonMat('player-chest-mat', C.AMORA_CHEST, scene);
+    chestMesh.scaling.set(1.1, 0.9, 0.5);
+    chestMesh.position.set(0, 0.05, 0.65);
+    chestMesh.parent = this.torsoGroup;
 
     // --- BODY/HINDQUARTERS ---
-    // A parte traseira, consideravelmente menor
-    const bodyGeo = new THREE.SphereGeometry(0.5, 12, 10);
-    const bodyMesh = new THREE.Mesh(bodyGeo, toonMat(C.AMORA_BODY));
-    bodyMesh.scale.set(0.9, 0.95, 1.1);
+    const bodyMesh = MeshBuilder.CreateSphere('player-body', { diameter: 1.0, segments: 12 }, scene);
+    bodyMesh.material = toonMat('player-body-mat', C.AMORA_BODY, scene);
+    bodyMesh.scaling.set(0.9, 0.95, 1.1);
     bodyMesh.position.set(0, 0.05, -0.25);
-    this.torsoGroup.add(bodyMesh);
+    bodyMesh.parent = this.torsoGroup;
 
-    // --- CAUDA ---
-    // Cauda deitada planamente sobre as costas, como na referência 3D
-    const tailGeo = new THREE.CapsuleGeometry(0.2, 0.4, 8, 8);
-    this.tailMesh = new THREE.Mesh(tailGeo, toonMat(C.AMORA_BODY));
+    // --- TAIL ---
+    this.tailMesh = MeshBuilder.CreateCapsule('player-tail', { height: 0.8, radius: 0.2, tessellation: 8 }, scene);
+    this.tailMesh.material = toonMat('player-tail-mat', C.AMORA_BODY, scene);
     this.tailMesh.rotation.x = Math.PI / 2;
-    this.tailMesh.scale.set(1.4, 1.0, 0.7);
+    this.tailMesh.scaling.set(1.4, 1.0, 0.7);
     this.tailMesh.position.set(0, 0.55, -0.4);
-    this.torsoGroup.add(this.tailMesh);
+    this.tailMesh.parent = this.torsoGroup;
 
-    // --- CABEÇA ---
-    this.headGroup = new THREE.Group();
-    // Embutida na juba 
+    // --- HEAD ---
+    this.headGroup = new TransformNode('player-head', scene);
     this.headGroup.position.set(0, 0.6, 0.4);
-    this.torsoGroup.add(this.headGroup);
+    this.headGroup.parent = this.torsoGroup;
 
-    // Esfera principal da cabeça
-    const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
-    const headMesh = new THREE.Mesh(headGeo, toonMat(C.AMORA_BODY));
-    this.headGroup.add(headMesh);
+    // Head sphere
+    const headMesh = MeshBuilder.CreateSphere('player-head-sphere', { diameter: 0.76, segments: 12 }, scene);
+    headMesh.material = toonMat('player-head-mat', C.AMORA_BODY, scene);
+    headMesh.parent = this.headGroup;
 
-    // Focinho (Muzzle) - Bem curto e projetado em branco, como na imagem
-    const snoutGeo = new THREE.SphereGeometry(0.14, 8, 6);
-    const snoutMesh = new THREE.Mesh(snoutGeo, toonMat(C.AMORA_CHEST));
+    // Snout (muzzle)
+    const snoutMesh = MeshBuilder.CreateSphere('player-snout', { diameter: 0.28, segments: 8 }, scene);
+    snoutMesh.material = toonMat('player-snout-mat', C.AMORA_CHEST, scene);
     snoutMesh.position.set(0, -0.05, 0.32);
-    snoutMesh.scale.set(1.2, 0.85, 1.0);
-    this.headGroup.add(snoutMesh);
+    snoutMesh.scaling.set(1.2, 0.85, 1.0);
+    snoutMesh.parent = this.headGroup;
 
-    // Nariz (Ponto preto brilhante em cima do focinho)
-    const noseGeo = new THREE.SphereGeometry(0.04, 6, 5);
-    const noseMesh = new THREE.Mesh(noseGeo, glossMat(C.AMORA_NOSE));
+    // Nose
+    const noseMesh = MeshBuilder.CreateSphere('player-nose', { diameter: 0.08, segments: 6 }, scene);
+    noseMesh.material = glossMat('player-nose-mat', C.AMORA_NOSE, scene);
     noseMesh.position.set(0, 0.04, 0.44);
-    this.headGroup.add(noseMesh);
+    noseMesh.parent = this.headGroup;
 
-    // Olhos (Separados, arredondados)
+    // Eyes
     for (const side of [-1, 1]) {
-      const eyeGeo = new THREE.SphereGeometry(0.05, 6, 5);
-      const eyeMesh = new THREE.Mesh(eyeGeo, glossMat(C.AMORA_EYE));
+      const eyeMesh = MeshBuilder.CreateSphere(`player-eye${side}`, { diameter: 0.1, segments: 6 }, scene);
+      eyeMesh.material = glossMat(`player-eye-mat${side}`, C.AMORA_EYE, scene);
       eyeMesh.position.set(side * 0.16, 0.08, 0.32);
-      this.headGroup.add(eyeMesh);
+      eyeMesh.parent = this.headGroup;
 
-      // Brilho do olho
-      const highlightGeo = new THREE.SphereGeometry(0.018, 4, 4);
-      const highlightMesh = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: C.AMORA_EYE_HIGHLIGHT }));
-      highlightMesh.position.set(side * 0.145, 0.1, 0.355);
-      this.headGroup.add(highlightMesh);
+      // Eye highlight
+      const hlMesh = MeshBuilder.CreateSphere(`player-eyehl${side}`, { diameter: 0.036, segments: 4 }, scene);
+      hlMesh.material = basicMat(`player-eyehl-mat${side}`, C.AMORA_EYE_HIGHLIGHT, scene);
+      hlMesh.position.set(side * 0.145, 0.1, 0.355);
+      hlMesh.parent = this.headGroup;
     }
 
-    // Orelhas (Pequenas, largas na base, pontas arredondadas, anguladas pros lados)
+    // Ears
     for (const side of [-1, 1]) {
-      const earGeo = new THREE.ConeGeometry(0.12, 0.16, 6);
-      const earMesh = new THREE.Mesh(earGeo, toonMat(C.AMORA_BODY));
+      const earMesh = MeshBuilder.CreateCylinder(`player-ear${side}`, {
+        diameterTop: 0, diameterBottom: 0.24, height: 0.16, tessellation: 6,
+      }, scene);
+      earMesh.material = toonMat(`player-ear-mat${side}`, C.AMORA_BODY, scene);
       earMesh.position.set(side * 0.22, 0.32, 0.05);
       earMesh.rotation.z = side * -0.4;
       earMesh.rotation.x = -0.15;
-      this.headGroup.add(earMesh);
+      earMesh.parent = this.headGroup;
     }
 
-    // Boca (Para latido)
-    const mouthGeo = new THREE.SphereGeometry(0.08, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-    this.mouthMesh = new THREE.Mesh(mouthGeo, toonMat(C.AMORA_TONGUE));
+    // Mouth (for bark)
+    this.mouthMesh = MeshBuilder.CreateSphere('player-mouth', { diameter: 0.16, segments: 6 }, scene);
+    this.mouthMesh.material = toonMat('player-mouth-mat', C.AMORA_TONGUE, scene);
     this.mouthMesh.position.set(0, -0.1, 0.4);
-    this.mouthMesh.visible = false;
-    this.headGroup.add(this.mouthMesh);
+    this.mouthMesh.setEnabled(false);
+    this.mouthMesh.parent = this.headGroup;
 
-    // --- PERNAS ---
-    // Pernas espessas, proporcionais
+    // --- LEGS ---
     const legPositions = [
-      { x: -0.28, z: 0.3, y: 0.15 }, // Frente Esq
-      { x: 0.28, z: 0.3, y: 0.15 },  // Frente Dir
-      { x: -0.22, z: -0.35, y: 0.15 }, // Tras Esq
-      { x: 0.22, z: -0.35, y: 0.15 },  // Tras Dir
+      { x: -0.28, z: 0.3, y: 0.15 },  // Front Left
+      { x: 0.28, z: 0.3, y: 0.15 },   // Front Right
+      { x: -0.22, z: -0.35, y: 0.15 }, // Back Left
+      { x: 0.22, z: -0.35, y: 0.15 },  // Back Right
     ];
     for (const [i, pos] of legPositions.entries()) {
-      const legGroup = new THREE.Group();
+      const legGroup = new TransformNode(`player-leg${i}`, scene);
       legGroup.position.set(pos.x, pos.y, pos.z);
-      
+      legGroup.parent = this.mesh;
+
       const isFront = i < 2;
       const legColor = isFront ? C.AMORA_CHEST : C.AMORA_BODY;
 
-      const legGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.25, 6);
-      const legMesh = new THREE.Mesh(legGeo, toonMat(legColor));
-      legMesh.position.y = 0.05; 
-      legGroup.add(legMesh);
+      const legMesh = MeshBuilder.CreateCylinder(`player-legcyl${i}`, {
+        diameterTop: 0.16, diameterBottom: 0.18, height: 0.25, tessellation: 6,
+      }, scene);
+      legMesh.material = toonMat(`player-leg-mat${i}`, legColor, scene);
+      legMesh.position.y = 0.05;
+      legMesh.parent = legGroup;
 
-      // Patas redondas/flat
-      const pawGeo = new THREE.SphereGeometry(0.12, 6, 5);
-      const pawMesh = new THREE.Mesh(pawGeo, toonMat(C.AMORA_CHEST));
-      pawMesh.scale.set(1.1, 0.6, 1.2);
-      pawMesh.position.y = -0.1;
-      pawMesh.position.z = 0.03;
-      legGroup.add(pawMesh);
+      // Paw
+      const pawMesh = MeshBuilder.CreateSphere(`player-paw${i}`, { diameter: 0.24, segments: 6 }, scene);
+      pawMesh.material = toonMat(`player-paw-mat${i}`, C.AMORA_CHEST, scene);
+      pawMesh.scaling.set(1.1, 0.6, 1.2);
+      pawMesh.position.set(0, -0.1, 0.03);
+      pawMesh.parent = legGroup;
 
-      this.mesh.add(legGroup);
       this.legs.push(legGroup);
     }
 
-    // --- SOMBRA ---
-    const shadowGeo = new THREE.CircleGeometry(0.65, 16);
-    const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.3,
-    });
-    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
-    shadowMesh.rotation.x = -Math.PI / 2;
+    // --- SHADOW ---
+    const shadowMesh = MeshBuilder.CreateDisc('player-shadow', { radius: 0.65, tessellation: 16 }, scene);
+    const shadowMat = basicMat('player-shadow-mat', 0x000000, scene);
+    shadowMat.alpha = 0.3;
+    shadowMesh.material = shadowMat;
+    shadowMesh.rotation.x = Math.PI / 2;
     shadowMesh.position.y = 0.02;
-    this.mesh.add(shadowMesh);
+    shadowMesh.parent = this.mesh;
   }
 
-  // ... (initPhysics e update permanecem os mesmos) ...
-
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number) {
-    const bodyDesc = physics.RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(x, y, z)
-      .setLinearDamping(2)
-      .lockRotations();
-    this.body = physics.createRigidBody(bodyDesc);
+    this.scene = physics.scene;
+    this.buildModel(this.scene);
 
-    const colliderDesc = physics.RAPIER.ColliderDesc.capsule(0.35, 0.4) // Aumentado um pouco
-      .setFriction(0.5)
-      .setRestitution(0);
-    physics.createCollider(colliderDesc, this.body);
+    this.mesh.position.set(x, y, z);
+
+    const shape = new PhysicsShapeCapsule(
+      new Vector3(0, 0.35, 0),
+      new Vector3(0, -0.35, 0),
+      0.4,
+      this.scene
+    );
+
+    this.body = new PhysicsBody(this.mesh, PhysicsMotionType.DYNAMIC, false, this.scene);
+    this.body.shape = shape;
+    this.body.setMassProperties({ mass: 1 });
+    this.body.setLinearDamping(2);
+    this.body.setAngularDamping(1000);
   }
 
   updatePlayer(dt: number, input: InputManager, camera: CameraSystem, physics: PhysicsWorld) {
@@ -204,7 +215,7 @@ export class Player extends Entity {
     this.groundCheckTimer -= dt;
     if (this.groundCheckTimer <= 0) {
       this.groundCheckTimer = 0.05;
-      const pos = this.body.translation();
+      const pos = this.mesh.position;
       const hit = physics.castRay(
         { x: pos.x, y: pos.y - 0.3, z: pos.z },
         { x: 0, y: -1, z: 0 },
@@ -216,20 +227,20 @@ export class Player extends Entity {
     // Movement
     const forward = camera.forwardXZ;
     const right = camera.rightXZ;
-    const moveDir = new THREE.Vector3();
-    moveDir.addScaledVector(forward, input.moveForward);
-    moveDir.addScaledVector(right, input.moveRight);
+    const moveDir = new Vector3();
+    moveDir.addInPlace(forward.scale(input.moveForward));
+    moveDir.addInPlace(right.scale(input.moveRight));
 
     const speed = input.isDown('ShiftLeft') ? this.runSpeed : this.walkSpeed;
-    const vel = this.body.linvel();
+    const vel = this.body.getLinearVelocity();
 
-    if (moveDir.lengthSq() > 0) {
+    if (moveDir.lengthSquared() > 0) {
       moveDir.normalize();
-      this.body.setLinvel({
-        x: moveDir.x * speed,
-        y: vel.y,
-        z: moveDir.z * speed
-      }, true);
+      this.body.setLinearVelocity(new Vector3(
+        moveDir.x * speed,
+        vel.y,
+        moveDir.z * speed,
+      ));
 
       // Face movement direction
       const targetAngle = Math.atan2(moveDir.x, moveDir.z);
@@ -239,14 +250,14 @@ export class Player extends Entity {
       this.walkCycle += dt * (input.isDown('ShiftLeft') ? 15 : 10);
       this.animateWalk();
     } else {
-      this.body.setLinvel({ x: 0, y: vel.y, z: 0 }, true);
+      this.body.setLinearVelocity(new Vector3(0, vel.y, 0));
       this.animateIdle(dt);
     }
 
     // Jump
     if (input.jump && this.isGrounded) {
-      const vel = this.body.linvel();
-      this.body.setLinvel({ x: vel.x, y: this.jumpForce, z: vel.z }, true);
+      const curVel = this.body.getLinearVelocity();
+      this.body.setLinearVelocity(new Vector3(curVel.x, this.jumpForce, curVel.z));
       this.isGrounded = false;
     }
 
@@ -272,42 +283,47 @@ export class Player extends Entity {
     if (this.barkWaveMesh) {
       this.barkWaveTimer -= dt;
       if (this.barkWaveTimer <= 0) {
-        this.barkWaveMesh.parent?.remove(this.barkWaveMesh);
+        this.barkWaveMesh.dispose();
         this.barkWaveMesh = null;
       } else {
         const scale = 1 + (0.5 - this.barkWaveTimer) * 15;
-        this.barkWaveMesh.scale.set(scale, scale, scale);
-        (this.barkWaveMesh.material as THREE.MeshBasicMaterial).opacity = this.barkWaveTimer * 2;
+        this.barkWaveMesh.scaling.set(scale, scale, scale);
+        const mat = this.barkWaveMesh.material as StandardMaterial;
+        mat.alpha = this.barkWaveTimer * 2;
       }
     }
-
-    this.syncMeshToBody();
   }
 
   usePower(): boolean {
-    if (!this.isPowerReady) return false;
+    if (!this.isPowerReady || !this.scene) return false;
     this.isPowerReady = false;
     this.powerCharge = 0;
 
     // Show mouth for bark
-    this.mouthMesh.visible = true;
-    setTimeout(() => { this.mouthMesh.visible = false; }, 500);
+    this.mouthMesh.setEnabled(true);
+    setTimeout(() => { this.mouthMesh.setEnabled(false); }, 500);
 
-    // Create bark wave visual
-    const waveGeo = new THREE.RingGeometry(0.5, 2.5, 16);
-    const waveMat = new THREE.MeshBasicMaterial({
-      color: C.POWER_WAVE,
-      transparent: true,
-      opacity: 1,
-      side: THREE.DoubleSide,
-    });
-    this.barkWaveMesh = new THREE.Mesh(waveGeo, waveMat);
-    this.barkWaveMesh.position.copy(this.mesh.position);
-    this.barkWaveMesh.position.y += 1;
-    const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
-    this.barkWaveMesh.position.add(fwd.multiplyScalar(1.5));
-    this.barkWaveMesh.lookAt(this.mesh.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    // Create bark wave visual (torus instead of ring)
+    const waveMesh = MeshBuilder.CreateTorus('bark-wave', {
+      diameter: 5,
+      thickness: 0.3,
+      tessellation: 16,
+    }, this.scene);
+    const waveMat = basicMat('bark-wave-mat', C.POWER_WAVE, this.scene);
+    waveMat.alpha = 1;
+    waveMat.backFaceCulling = false;
+    waveMesh.material = waveMat;
+
+    waveMesh.position.copyFrom(this.mesh.position);
+    waveMesh.position.y += 1;
+    const fwd = new Vector3(
+      Math.sin(this.mesh.rotation.y),
+      0,
+      Math.cos(this.mesh.rotation.y),
+    );
+    waveMesh.position.addInPlace(fwd.scale(1.5));
     this.barkWaveTimer = 0.5;
+    this.barkWaveMesh = waveMesh;
 
     return true;
   }
@@ -319,19 +335,23 @@ export class Player extends Entity {
     return true;
   }
 
-  getBarkDirection(): THREE.Vector3 {
-    return new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
+  getBarkDirection(): Vector3 {
+    return new Vector3(
+      Math.sin(this.mesh.rotation.y),
+      0,
+      Math.cos(this.mesh.rotation.y),
+    );
   }
 
   getVelocityY(): number {
     if (!this.body) return 0;
-    return this.body.linvel().y;
+    return this.body.getLinearVelocity().y;
   }
 
   bounce() {
     if (!this.body) return;
-    const vel = this.body.linvel();
-    this.body.setLinvel({ x: vel.x, y: 10, z: vel.z }, true);
+    const vel = this.body.getLinearVelocity();
+    this.body.setLinearVelocity(new Vector3(vel.x, 10, vel.z));
   }
 
   get powerPercent(): number {
@@ -351,7 +371,7 @@ export class Player extends Entity {
     // Back legs
     this.legs[2].rotation.x = -sin * 0.5;
     this.legs[3].rotation.x = sin * 0.5;
-    // Troso bobble
+    // Torso bobble
     this.torsoGroup.position.y = 0.5 + Math.abs(cos) * 0.05;
     // Head rotation
     this.headGroup.rotation.x = Math.sin(this.walkCycle * 0.5) * 0.05;
@@ -362,10 +382,10 @@ export class Player extends Entity {
   private animateIdle(dt: number) {
     this.walkCycle += dt * 2;
     const breathe = Math.sin(this.walkCycle) * 0.02;
-    
+
     // Scale on Y handles the breathing
-    this.torsoGroup.scale.y = 1.0 + breathe;
-    
+    this.torsoGroup.scaling.y = 1.0 + breathe;
+
     // Reset legs
     for (const leg of this.legs) {
       leg.rotation.x *= 0.9;
@@ -383,8 +403,8 @@ export class Player extends Entity {
     this.isSuperReady = false;
     this.invincibleTimer = 0;
     if (this.body) {
-      this.body.setTranslation({ x, y, z }, true);
-      this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      this.mesh.position.set(x, y, z);
+      this.body.setLinearVelocity(Vector3.Zero());
     }
   }
 }

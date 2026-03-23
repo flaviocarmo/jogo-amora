@@ -1,16 +1,25 @@
-import * as THREE from 'three';
+import { Scene } from '@babylonjs/core/scene';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Terrain } from '../world/Terrain';
 import { Rocks } from '../world/Rocks';
 import { Skybox } from '../world/Skybox';
-import { Rabbit } from '../entities/enemies/Rabbit';
-import { Cat } from '../entities/enemies/Cat';
-import { Chicken } from '../entities/enemies/Chicken';
 import { Biscuit } from '../entities/items/Biscuit';
 import { Enemy } from '../entities/enemies/Enemy';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import * as C from '../utils/colors';
 import { randomRange } from '../utils/math';
+import { toonMat, basicMat, hexColor } from '../utils/materials';
 import type { LevelData } from './Level1';
+
+import { Rabbit } from '../entities/enemies/Rabbit';
+import { Cat } from '../entities/enemies/Cat';
+import { Chicken } from '../entities/enemies/Chicken';
 
 /**
  * Level 9: Jardim Encantado
@@ -20,107 +29,111 @@ import type { LevelData } from './Level1';
  */
 
 function createFlower(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   petalColor: number,
   scale: number
 ) {
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c });
-  const group = new THREE.Group();
+  const root = new TransformNode('flower', scene);
+  root.position.set(x, y, z);
 
   // Stem
-  const stemGeo = new THREE.CylinderGeometry(0.03 * scale, 0.04 * scale, 0.35 * scale, 4);
-  const stem = new THREE.Mesh(stemGeo, toon(0x33aa33));
-  stem.position.y = 0.18 * scale;
-  group.add(stem);
+  const stem = MeshBuilder.CreateCylinder('flowerStem', {
+    diameterTop: 0.03 * scale * 2,
+    diameterBottom: 0.04 * scale * 2,
+    height: 0.35 * scale,
+    tessellation: 4,
+  }, scene);
+  stem.position.set(0, 0.18 * scale, 0);
+  stem.material = toonMat('stemMat', 0x33aa33, scene);
+  stem.parent = root;
 
   // Petals as a flat sphere
-  const petalGeo = new THREE.SphereGeometry(0.15 * scale, 6, 4);
-  const petal = new THREE.Mesh(petalGeo, toon(petalColor));
-  petal.position.y = 0.38 * scale;
-  petal.scale.y = 0.5;
-  group.add(petal);
+  const petal = MeshBuilder.CreateSphere('flowerPetal', {
+    diameter: 0.15 * scale * 2,
+    segments: 6,
+  }, scene);
+  petal.position.set(0, 0.38 * scale, 0);
+  petal.scaling.set(1, 0.5, 1);
+  petal.material = toonMat('petalMat', petalColor, scene);
+  petal.parent = root;
 
   // Yellow center
-  const centerGeo = new THREE.SphereGeometry(0.07 * scale, 5, 4);
-  const center = new THREE.Mesh(centerGeo, toon(0xffee00));
-  center.position.y = 0.4 * scale;
-  group.add(center);
-
-  group.position.set(x, y, z);
-  scene.add(group);
+  const center = MeshBuilder.CreateSphere('flowerCenter', {
+    diameter: 0.07 * scale * 2,
+    segments: 5,
+  }, scene);
+  center.position.set(0, 0.4 * scale, 0);
+  center.material = toonMat('centerMat', 0xffee00, scene);
+  center.parent = root;
 }
 
 function createHedge(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   width: number, height: number, depth: number
 ) {
-  const hedgeGeo = new THREE.BoxGeometry(width, height, depth);
-  const hedgeMat = new THREE.MeshToonMaterial({ color: C.L9_HEDGE });
-  const hedge = new THREE.Mesh(hedgeGeo, hedgeMat);
+  const hedge = MeshBuilder.CreateBox('hedge', { width, height, depth }, scene);
   hedge.position.set(x, y + height / 2, z);
-  hedge.castShadow = true;
-  hedge.receiveShadow = true;
-  scene.add(hedge);
+  hedge.material = toonMat('hedgeMat', C.L9_HEDGE, scene);
 
   // Lighter top to give the trimmed look
-  const topGeo = new THREE.BoxGeometry(width + 0.1, 0.2, depth + 0.1);
-  const topMat = new THREE.MeshToonMaterial({ color: 0x44aa44 });
-  const top = new THREE.Mesh(topGeo, topMat);
+  const top = MeshBuilder.CreateBox('hedgeTop', {
+    width: width + 0.1,
+    height: 0.2,
+    depth: depth + 0.1,
+  }, scene);
   top.position.set(x, y + height + 0.1, z);
-  scene.add(top);
+  top.material = toonMat('hedgeTopMat', 0x44aa44, scene);
 }
 
 function createButterfly(
-  scene: THREE.Scene,
+  scene: Scene,
   x: number, y: number, z: number,
   color: number
 ) {
-  // Represent as a small colored point light floating in the air
-  // giving the impression of glowing magical butterflies
-  const light = new THREE.PointLight(color, 0.4, 5);
-  light.position.set(x, y + randomRange(1.5, 3.5), z);
-  scene.add(light);
+  // Colored point light giving the impression of glowing magical butterflies
+  const butterflyY = y + randomRange(1.5, 3.5);
+  const light = new PointLight('butterfly', new Vector3(x, butterflyY, z), scene);
+  light.diffuse = hexColor(color);
+  light.intensity = 0.4;
+  light.range = 5;
 
-  // Small flat plane as wing silhouette
-  const toon = (c: number) => new THREE.MeshToonMaterial({ color: c, side: THREE.DoubleSide });
+  // Small flat planes as wing silhouettes
   for (let side = -1; side <= 1; side += 2) {
-    const wingGeo = new THREE.PlaneGeometry(0.2, 0.15);
-    const wing = new THREE.Mesh(wingGeo, toon(color));
-    wing.position.set(x + side * 0.12, y + randomRange(1.5, 3.5), z);
+    const wingY = y + randomRange(1.5, 3.5);
+    const wing = MeshBuilder.CreatePlane('butterflyWing', {
+      width: 0.2,
+      height: 0.15,
+      sideOrientation: MeshBuilder.DOUBLESIDE,
+    }, scene);
+    wing.position.set(x + side * 0.12, wingY, z);
     wing.rotation.y = Math.PI / 4;
-    scene.add(wing);
+    wing.material = toonMat('wingMat', color, scene);
   }
 }
 
-export function createLevel9(physics: PhysicsWorld): LevelData {
-  const scene = new THREE.Scene();
-
+export function createLevel9(scene: Scene, physics: PhysicsWorld): LevelData {
   // No fog — the garden is clear and magical
-  const sky = new Skybox(C.L9_SKY_TOP, C.L9_SKY_BOTTOM);
-  scene.add(sky.mesh);
+
+  // Skybox
+  const sky = new Skybox(C.L9_SKY_TOP, C.L9_SKY_BOTTOM, scene);
 
   // Warm magical ambient light
-  const ambientLight = new THREE.AmbientLight(0xffccee, 0.55);
-  scene.add(ambientLight);
+  const hemiLight = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+  hemiLight.diffuse = hexColor(0xffccee);
+  hemiLight.groundColor = hexColor(0xffccee);
+  hemiLight.intensity = 0.55;
 
   // Warm golden sun
-  const sunLight = new THREE.DirectionalLight(0xffe0cc, 1.0);
-  sunLight.position.set(8, 30, 10);
-  sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(1024, 1024);
-  sunLight.shadow.camera.far = 100;
-  sunLight.shadow.camera.left = -50;
-  sunLight.shadow.camera.right = 50;
-  sunLight.shadow.camera.top = 50;
-  sunLight.shadow.camera.bottom = -50;
-  scene.add(sunLight);
+  const sunLight = new DirectionalLight('sun', new Vector3(-8, -30, -10).normalize(), scene);
+  sunLight.diffuse = hexColor(0xffe0cc);
+  sunLight.intensity = 1.0;
 
   // Soft pink fill from the pink sky
-  const fillLight = new THREE.DirectionalLight(0xffaacc, 0.35);
-  fillLight.position.set(-12, 15, -10);
-  scene.add(fillLight);
+  const fillLight = new DirectionalLight('fill', new Vector3(12, -15, 10).normalize(), scene);
+  fillLight.diffuse = hexColor(0xffaacc);
+  fillLight.intensity = 0.35;
 
   // Terrain (garden hills, gentle undulation)
   const terrain = new Terrain({
@@ -131,8 +144,7 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     color: C.L9_GRASS,
     colorDark: C.L9_GRASS_DARK,
     noiseScale: 0.05,
-  });
-  scene.add(terrain.mesh);
+  }, scene);
   terrain.initPhysics(physics);
 
   // Scattered flowers — pink and yellow across the garden
@@ -185,8 +197,7 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     count: 15,
     areaSize: 75,
     getHeight: (x, z) => terrain.getHeightAt(x, z),
-  });
-  scene.add(rocks.group);
+  }, scene);
 
   // Enemies: 3 chickens + 3 cats + 2 rabbits
   const enemies: Enemy[] = [];
@@ -197,7 +208,6 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     const chicken = new Chicken(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     chicken.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(chicken.mesh);
     enemies.push(chicken);
   }
 
@@ -208,7 +218,6 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     const cat = new Cat(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     cat.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(cat.mesh);
     enemies.push(cat);
   }
 
@@ -219,7 +228,6 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     const rabbit = new Rabbit(pos.x, pos.z);
     const y = terrain.getHeightAt(pos.x, pos.z) + 2;
     rabbit.initPhysics(physics, pos.x, y, pos.z);
-    scene.add(rabbit.mesh);
     enemies.push(rabbit);
   }
 
@@ -228,10 +236,9 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
   boss.bossName = 'Galinha Rainha';
   const bossY = terrain.getHeightAt(30, -30) + 3;
   boss.initPhysics(physics, 30, bossY, -30, 0.85);
-  scene.add(boss.mesh);
   enemies.push(boss);
 
-  // Royal flower garden around boss — ring of pink flowers and warm lights
+  // Royal flower garden around boss — ring of pink flowers
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
     const fx = 30 + Math.cos(angle) * 5;
@@ -243,13 +250,13 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
   // Warm point lights in the boss clearing
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const light = new THREE.PointLight(0xff88bb, 0.5, 8);
-    light.position.set(
-      30 + Math.cos(angle) * 4,
-      terrain.getHeightAt(30, -30) + 2,
-      -30 + Math.sin(angle) * 4
-    );
-    scene.add(light);
+    const lx = 30 + Math.cos(angle) * 4;
+    const lz = -30 + Math.sin(angle) * 4;
+    const ly = terrain.getHeightAt(30, -30) + 2;
+    const bossAreaLight = new PointLight('bossLight' + i, new Vector3(lx, ly, lz), scene);
+    bossAreaLight.diffuse = hexColor(0xff88bb);
+    bossAreaLight.intensity = 0.5;
+    bossAreaLight.range = 8;
   }
 
   // Biscuits hidden among the flower beds
@@ -258,8 +265,7 @@ export function createLevel9(physics: PhysicsWorld): LevelData {
     const x = randomRange(-32, 32);
     const z = randomRange(-32, 32);
     const y = terrain.getHeightAt(x, z);
-    const biscuit = new Biscuit(x, y, z);
-    scene.add(biscuit.mesh);
+    const biscuit = new Biscuit(x, y, z, scene);
     biscuits.push(biscuit);
   }
 

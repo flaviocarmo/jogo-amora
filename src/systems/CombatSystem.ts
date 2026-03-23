@@ -1,4 +1,5 @@
-import * as THREE from 'three';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/enemies/Enemy';
 import { Biscuit } from '../entities/items/Biscuit';
@@ -61,11 +62,11 @@ export class CombatSystem {
               const dx = playerPos.x - enemyPos.x;
               const dz = playerPos.z - enemyPos.z;
               const d = Math.sqrt(dx * dx + dz * dz) || 1;
-              player.body.setLinvel({
-                x: (dx / d) * 8,
-                y: 5,
-                z: (dz / d) * 8,
-              }, true);
+              player.body.setLinearVelocity(new Vector3(
+                (dx / d) * 8,
+                5,
+                (dz / d) * 8,
+              ));
             }
           }
         }
@@ -82,7 +83,7 @@ export class CombatSystem {
     // Biscuit collection
     for (const biscuit of biscuits) {
       if (biscuit.collected) continue;
-      const dist = playerPos.distanceTo(biscuit.mesh.position);
+      const dist = Vector3.Distance(playerPos, biscuit.mesh.position as Vector3);
       if (dist < 1.5) {
         biscuit.collect();
         if (player.health < player.maxHealth) {
@@ -96,14 +97,11 @@ export class CombatSystem {
     }
   }
 
-  executeBark(player: Player, enemies: Enemy[], audio: AudioManager, scene: THREE.Scene, onEnemyKill: () => void) {
+  executeBark(player: Player, enemies: Enemy[], audio: AudioManager, _scene: Scene, onEnemyKill: () => void) {
     if (!player.usePower()) return;
     audio.playBark();
 
-    // Add bark wave to scene
-    if (player.barkWaveMesh) {
-      scene.add(player.barkWaveMesh);
-    }
+    // barkWaveMesh is created inside player.usePower() and already attached to the scene
 
     // Damage enemies in front cone
     const playerPos = player.position;
@@ -118,10 +116,12 @@ export class CombatSystem {
       if (dist > barkRange) continue;
 
       // Check if enemy is in front cone
-      const toEnemy = new THREE.Vector3(
-        enemyPos.x - playerPos.x, 0, enemyPos.z - playerPos.z
+      const toEnemy = new Vector3(
+        enemyPos.x - playerPos.x,
+        0,
+        enemyPos.z - playerPos.z,
       ).normalize();
-      const dot = barkDir.dot(toEnemy);
+      const dot = Vector3.Dot(barkDir, toEnemy);
       if (dot > Math.cos(barkAngle)) {
         // Hit!
         if (enemy.takeDamage(3)) {
@@ -129,11 +129,11 @@ export class CombatSystem {
           enemy.stun(1.5);
           // Knockback from bark
           if (enemy.body) {
-            enemy.body.setLinvel({
-              x: toEnemy.x * 15,
-              y: 5,
-              z: toEnemy.z * 15,
-            }, true);
+            enemy.body.setLinearVelocity(new Vector3(
+              toEnemy.x * 15,
+              5,
+              toEnemy.z * 15,
+            ));
           }
           if (!enemy.alive) {
             onEnemyKill();
