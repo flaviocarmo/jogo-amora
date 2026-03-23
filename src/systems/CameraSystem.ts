@@ -28,16 +28,17 @@ export class CameraSystem {
     return new Vector3(Math.cos(alpha), 0, -Math.sin(alpha)).normalize();
   }
 
-  update(playerPos: Vector3, mouseDX: number, mouseDY: number, _dt: number) {
+  update(playerPos: Vector3, mouseDX: number, mouseDY: number, dt: number) {
     // Rotate camera
     this.camera.alpha -= mouseDX * 0.003;
     this.camera.beta -= mouseDY * 0.003;
     // Clamp beta
     this.camera.beta = Math.max(this.camera.lowerBetaLimit!, Math.min(this.camera.upperBetaLimit!, this.camera.beta));
 
-    // Smoothly follow player
+    // Smoothly follow player (dt-independent exponential lerp)
+    const lerpFactor = 1 - Math.pow(0.001, dt);
     const targetPos = new Vector3(playerPos.x, playerPos.y + 1.5, playerPos.z);
-    Vector3.LerpToRef(this.target, targetPos, 0.1, this.target);
+    Vector3.LerpToRef(this.target, targetPos, lerpFactor, this.target);
     this.camera.setTarget(this.target);
   }
 

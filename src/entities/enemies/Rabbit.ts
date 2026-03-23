@@ -3,7 +3,7 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
-import { Enemy } from './Enemy';
+import { Enemy, EnemyState } from './Enemy';
 import { toonMat, basicMat } from '../../utils/materials';
 import * as C from '../../utils/colors';
 
@@ -132,11 +132,11 @@ export class Rabbit extends Enemy {
     const isMoving = speedSq > 0.1;
 
     const pos = this.mesh.position;
-    const isGrounded = vel.y >= -0.1 && vel.y <= 0.1 && pos.y < 1.0;
+    const isGrounded = vel.y >= -0.5 && vel.y <= 0.5;
 
     // Jumping Logic
     this.jumpTimer -= dt;
-    if (this.jumpTimer <= 0 && this.state === 1 && isGrounded) { // CHASE
+    if (this.jumpTimer <= 0 && this.state === EnemyState.CHASE && isGrounded) {
       this.isJumping = true;
       this.body.setLinearVelocity(new Vector3(vel.x * 1.5, 7, vel.z * 1.5));
       this.jumpTimer = 1.0 + Math.random() * 1.5;

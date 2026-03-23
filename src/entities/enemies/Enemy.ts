@@ -72,9 +72,9 @@ export class Enemy extends Entity {
     this.body = new PhysicsBody(this.mesh, PhysicsMotionType.DYNAMIC, false, this.scene);
     this.body.shape = shape;
     this.body.setMassProperties({ mass: 1 });
-    this.body.setLinearDamping(3);
-    // Lock rotations by setting angular damping very high
-    this.body.setAngularDamping(1000);
+    this.body.setLinearDamping(0.5);
+    // Lock rotations by setting angular damping high
+    this.body.setAngularDamping(100);
   }
 
   /** Override in subclasses to build the visual model. Called from initPhysics when scene is available. */

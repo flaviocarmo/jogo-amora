@@ -64,8 +64,6 @@ export class Game {
   private levelData: LevelData | null = null;
   private scene: Scene | null = null;
 
-  private readonly FIXED_STEP = 1 / 60;
-  private accumulator = 0;
   private lastTime = 0;
   private killCount = 0;
   private totalEnemies = 0;
@@ -137,6 +135,7 @@ export class Game {
     if (this.scene) {
       this.scene.dispose();
     }
+    this.menuCamera = null;
 
     // Create a fresh Babylon scene for this level
     const scene = new Scene(this.engine);
@@ -174,6 +173,7 @@ export class Game {
 
     // Camera and particle systems must be recreated per scene
     this.cameraSystem = new CameraSystem(scene);
+    scene.activeCamera = this.cameraSystem.camera;
     this.particleSystem = new ParticleSystem(scene);
 
     // Spawn player at the level's designated spawn point
@@ -213,18 +213,17 @@ export class Game {
     const now = performance.now();
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
-    dt = Math.min(dt, 0.1); // Cap delta to avoid spiral-of-death on tab switch
+    dt = Math.min(dt, 0.05); // Cap delta at 50ms to avoid spiral-of-death
 
     if (this.state === GameState.PLAYING) {
       this.input.update();
 
-      this.accumulator += dt;
-      while (this.accumulator >= this.FIXED_STEP) {
-        this.fixedUpdate(this.FIXED_STEP);
-        this.accumulator -= this.FIXED_STEP;
-      }
+      // Run game logic once per frame; Havok auto-steps inside scene.render()
+      this.update(dt);
 
-      this.render();
+      if (this.scene) {
+        this.scene.render();
+      }
       this.input.afterUpdate();
     } else if (
       this.state === GameState.MENU ||
@@ -248,12 +247,8 @@ export class Game {
     }
   };
 
-  private fixedUpdate(dt: number) {
+  private update(dt: number) {
     if (!this.levelData || !this.scene) return;
-
-    // Havok advances automatically inside scene.render(), but we call step()
-    // here to keep the API consistent and allow future manual stepping.
-    this.physics.step(dt);
 
     // Player update (movement, jump, bark wave animation, power/super bars)
     this.player.updatePlayer(dt, this.input, this.cameraSystem, this.physics);
@@ -359,11 +354,6 @@ export class Game {
       this.player.alive = false;
       this.gameOver();
     }
-  }
-
-  private render() {
-    if (!this.scene) return;
-    this.scene.render();
   }
 
   // ─── Level progression ────────────────────────────────────────────

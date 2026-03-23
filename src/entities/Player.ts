@@ -204,8 +204,8 @@ export class Player extends Entity {
     this.body = new PhysicsBody(this.mesh, PhysicsMotionType.DYNAMIC, false, this.scene);
     this.body.shape = shape;
     this.body.setMassProperties({ mass: 1 });
-    this.body.setLinearDamping(2);
-    this.body.setAngularDamping(1000);
+    this.body.setLinearDamping(0.3);
+    this.body.setAngularDamping(100);
   }
 
   updatePlayer(dt: number, input: InputManager, camera: CameraSystem, physics: PhysicsWorld) {
@@ -217,10 +217,11 @@ export class Player extends Entity {
     if (this.groundCheckTimer <= 0) {
       this.groundCheckTimer = 0.05;
       const pos = this.mesh.position;
+      // Ray starts from bottom of capsule (capsule pointB is at -0.35, radius 0.4)
       const hit = physics.castRay(
-        { x: pos.x, y: pos.y - 0.3, z: pos.z },
+        { x: pos.x, y: pos.y - 0.75, z: pos.z },
         { x: 0, y: -1, z: 0 },
-        0.5
+        0.3
       );
       this.isGrounded = hit !== null;
     }

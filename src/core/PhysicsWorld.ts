@@ -16,10 +16,15 @@ import '@babylonjs/core/Physics/v2/physicsEngineComponent';
 export class PhysicsWorld {
   private plugin!: HavokPlugin;
   private _scene!: Scene;
+  private initialized = false;
 
   async init(scene?: Scene): Promise<void> {
-    const havokInstance = await HavokPhysics();
-    this.plugin = new HavokPlugin(true, havokInstance);
+    // Only create the HavokPhysics instance once; reuse the plugin across levels
+    if (!this.initialized) {
+      const havokInstance = await HavokPhysics();
+      this.plugin = new HavokPlugin(true, havokInstance);
+      this.initialized = true;
+    }
 
     if (scene) {
       this._scene = scene;
@@ -74,7 +79,9 @@ export class PhysicsWorld {
       new Vector3(direction.x, direction.y, direction.z),
       maxDistance,
     );
-    const hit = this._scene.pickWithRay(ray);
+    const predicate = (mesh: import('@babylonjs/core/Meshes/abstractMesh').AbstractMesh) =>
+      mesh.name.includes('terrain') || mesh.name.includes('ground') || mesh.name.includes('floor');
+    const hit = this._scene.pickWithRay(ray, predicate);
     return hit?.hit ? hit : null;
   }
 }
