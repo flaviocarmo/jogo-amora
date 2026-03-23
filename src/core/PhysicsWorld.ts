@@ -10,6 +10,9 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Ray } from '@babylonjs/core/Culling/ray';
 import HavokPhysics from '@babylonjs/havok';
 
+// Side-effect import: patches Scene.prototype with enablePhysics()
+import '@babylonjs/core/Physics/v2/physicsEngineComponent';
+
 export class PhysicsWorld {
   private plugin!: HavokPlugin;
   private _scene!: Scene;
