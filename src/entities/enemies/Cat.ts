@@ -253,16 +253,16 @@ export class Cat extends Enemy {
 
   updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
-    if (!this.alive || !this.body) return;
+    if (!this.alive || !this.hasController) return;
 
     const pos = this.mesh.position;
-    const vel = this.body.getLinearVelocity();
+    const vel = this.getControllerVelocity();
     const dx = playerPos.x - pos.x;
     const dz = playerPos.z - pos.z;
     const distToPlayer = Math.sqrt(dx * dx + dz * dz);
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.2;
-    const isGrounded = vel.y >= -0.15 && vel.y <= 0.15 && pos.y < 1.0;
+    const isGrounded = this._isGrounded;
 
     // Only run custom cat AI while in CHASE state
     if (this.state === EnemyState.CHASE) {
@@ -349,8 +349,8 @@ export class Cat extends Enemy {
         const oz = targetZ - pos.z;
         const od = Math.sqrt(ox * ox + oz * oz);
         const circleSpeed = this.speed * 0.65;
-        if (od > 0.2 && this.body) {
-          this.body.setLinearVelocity(new Vector3(
+        if (od > 0.2) {
+          this.setDirectVelocity(new Vector3(
             (ox / od) * circleSpeed, vel.y, (oz / od) * circleSpeed
           ));
         }
@@ -366,16 +366,14 @@ export class Cat extends Enemy {
       case CatPhase.POUNCING: {
         if (this.pounceChargeTimer > 0) {
           this.pounceChargeTimer -= dt;
-          if (this.body) {
-            this.body.setLinearVelocity(new Vector3(vel.x * 0.3, vel.y, vel.z * 0.3));
-          }
+          this.setDirectVelocity(new Vector3(vel.x * 0.3, vel.y, vel.z * 0.3));
           this.graphicGroup.scaling.set(1.2, 0.7, 1.2);
 
-          if (this.pounceChargeTimer <= 0 && this.body) {
+          if (this.pounceChargeTimer <= 0) {
             const d = Math.sqrt(dx * dx + dz * dz);
             if (d > 0) {
               const pounceSpeed = this.speed * 3.2;
-              this.body.setLinearVelocity(new Vector3(
+              this.setDirectVelocity(new Vector3(
                 (dx / d) * pounceSpeed,
                 6.5,
                 (dz / d) * pounceSpeed,
@@ -392,9 +390,7 @@ export class Cat extends Enemy {
 
       case CatPhase.RECOVERING: {
         this.recoverTimer -= dt;
-        if (this.body) {
-          this.body.setLinearVelocity(new Vector3(vel.x * 0.85, vel.y, vel.z * 0.85));
-        }
+        this.setDirectVelocity(new Vector3(vel.x * 0.85, vel.y, vel.z * 0.85));
         if (this.recoverTimer <= 0) {
           this.catPhase = CatPhase.CIRCLING;
           this.pounceTimer = 1.8 + Math.random() * 2.2;

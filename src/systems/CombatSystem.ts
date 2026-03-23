@@ -25,7 +25,7 @@ export class CombatSystem {
 
     // Check stomp on enemies
     for (const enemy of enemies) {
-      if (!enemy.alive || !enemy.body) continue;
+      if (!enemy.alive || !enemy.hasController) continue;
 
       const enemyPos = enemy.position;
       const dist = distanceXZ(playerPos.x, playerPos.z, enemyPos.x, enemyPos.z);
@@ -57,17 +57,15 @@ export class CombatSystem {
             player.invincibleTimer = 1.5;
             audio.playDamage();
             onDamage();
-            // Knockback
-            if (player.body) {
-              const dx = playerPos.x - enemyPos.x;
-              const dz = playerPos.z - enemyPos.z;
-              const d = Math.sqrt(dx * dx + dz * dz) || 1;
-              player.body.setLinearVelocity(new Vector3(
-                (dx / d) * 8,
-                5,
-                (dz / d) * 8,
-              ));
-            }
+            // Knockback via character controller
+            const dx = playerPos.x - enemyPos.x;
+            const dz = playerPos.z - enemyPos.z;
+            const d = Math.sqrt(dx * dx + dz * dz) || 1;
+            player.applyKnockback(new Vector3(
+              (dx / d) * 8,
+              5,
+              (dz / d) * 8,
+            ));
           }
         }
       }
@@ -127,14 +125,12 @@ export class CombatSystem {
         if (enemy.takeDamage(3)) {
           enemy.onTakeDamage();
           enemy.stun(1.5);
-          // Knockback from bark
-          if (enemy.body) {
-            enemy.body.setLinearVelocity(new Vector3(
-              toEnemy.x * 15,
-              5,
-              toEnemy.z * 15,
-            ));
-          }
+          // Knockback from bark via character controller
+          enemy.applyKnockback(new Vector3(
+            toEnemy.x * 15,
+            5,
+            toEnemy.z * 15,
+          ));
           if (!enemy.alive) {
             onEnemyKill();
           }

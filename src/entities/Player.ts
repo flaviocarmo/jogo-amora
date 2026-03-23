@@ -1,12 +1,11 @@
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
-import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
-import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
-import { PhysicsShapeCapsule } from '@babylonjs/core/Physics/v2/physicsShape';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { PhysicsCharacterController, CharacterSupportedState } from '@babylonjs/core/Physics/v2/characterController';
+import '@babylonjs/core/Physics/joinedPhysicsEngineComponent';
 import { Entity } from './Entity';
 import { PhysicsWorld } from '../core/PhysicsWorld';
 import { InputManager } from '../core/InputManager';
@@ -15,22 +14,40 @@ import { toonMat, glossMat, basicMat } from '../utils/materials';
 import * as C from '../utils/colors';
 import { clamp } from '../utils/math';
 
+type CharacterState = 'IN_AIR' | 'ON_GROUND' | 'START_JUMP';
+
 export class Player extends Entity {
-  private walkSpeed = 8;
-  private runSpeed = 12;
-  private jumpForce = 12;
-  private isGrounded = false;
-  private groundCheckTimer = 0;
+  // Character controller (replaces raw PhysicsBody)
+  private controller!: PhysicsCharacterController;
+
+  // Movement tuning
+  private onGroundSpeed = 10;
+  private inAirSpeed = 8;
+  private runMultiplier = 1.6;
+  private jumpHeight = 1.5;
+  private characterGravity = new Vector3(0, -18, 0);
+
+  // State machine
+  private charState: CharacterState = 'IN_AIR';
+  private wantJump = 0;
+  private isRunning = false;
+
+  // Stored input (set in updatePlayer, consumed in physics callback)
+  private inputDir = new Vector3();
+  private characterOrientation = Quaternion.Identity();
 
   // Power bar
   powerCharge = 0;
   readonly powerChargeTime = 15;
   isPowerReady = false;
 
-  // Super bar (charges only when power is ready)
+  // Super bar
   superCharge = 0;
   readonly superChargeTime = 20;
   isSuperReady = false;
+
+  // Facing
+  private facingAngle = 0;
 
   // Animation
   private walkCycle = 0;
@@ -40,7 +57,7 @@ export class Player extends Entity {
   private tailMesh!: Mesh;
   private mouthMesh!: Mesh;
 
-  // Bark wave visual
+  // Bark wave
   barkWaveMesh: Mesh | null = null;
   private barkWaveTimer = 0;
 
@@ -55,33 +72,28 @@ export class Player extends Entity {
     if (this.modelBuilt) return;
     this.modelBuilt = true;
 
-    // --- TORSO GROUP ---
     this.torsoGroup = new TransformNode('player-torso', scene);
     this.torsoGroup.position.set(0, 0.5, 0);
     this.torsoGroup.parent = this.mesh;
 
-    // --- MANE/CHEST ---
     const maneMesh = MeshBuilder.CreateSphere('player-mane', { diameter: 1.3, segments: 16 }, scene);
     maneMesh.material = toonMat('player-mane-mat', C.AMORA_BODY, scene);
     maneMesh.scaling.set(1.05, 1.0, 1.05);
     maneMesh.position.set(0, 0.15, 0.15);
     maneMesh.parent = this.torsoGroup;
 
-    // Chest grey patch
     const chestMesh = MeshBuilder.CreateSphere('player-chest', { diameter: 0.8, segments: 10 }, scene);
     chestMesh.material = toonMat('player-chest-mat', C.AMORA_CHEST, scene);
     chestMesh.scaling.set(1.1, 0.9, 0.5);
     chestMesh.position.set(0, 0.05, 0.65);
     chestMesh.parent = this.torsoGroup;
 
-    // --- BODY/HINDQUARTERS ---
     const bodyMesh = MeshBuilder.CreateSphere('player-body', { diameter: 1.0, segments: 12 }, scene);
     bodyMesh.material = toonMat('player-body-mat', C.AMORA_BODY, scene);
     bodyMesh.scaling.set(0.9, 0.95, 1.1);
     bodyMesh.position.set(0, 0.05, -0.25);
     bodyMesh.parent = this.torsoGroup;
 
-    // --- TAIL ---
     this.tailMesh = MeshBuilder.CreateCapsule('player-tail', { height: 0.8, radius: 0.2, tessellation: 8 }, scene);
     this.tailMesh.material = toonMat('player-tail-mat', C.AMORA_BODY, scene);
     this.tailMesh.rotation.x = Math.PI / 2;
@@ -89,44 +101,37 @@ export class Player extends Entity {
     this.tailMesh.position.set(0, 0.55, -0.4);
     this.tailMesh.parent = this.torsoGroup;
 
-    // --- HEAD ---
     this.headGroup = new TransformNode('player-head', scene);
     this.headGroup.position.set(0, 0.6, 0.4);
     this.headGroup.parent = this.torsoGroup;
 
-    // Head sphere
     const headMesh = MeshBuilder.CreateSphere('player-head-sphere', { diameter: 0.76, segments: 12 }, scene);
     headMesh.material = toonMat('player-head-mat', C.AMORA_BODY, scene);
     headMesh.parent = this.headGroup;
 
-    // Snout (muzzle)
     const snoutMesh = MeshBuilder.CreateSphere('player-snout', { diameter: 0.28, segments: 8 }, scene);
     snoutMesh.material = toonMat('player-snout-mat', C.AMORA_CHEST, scene);
     snoutMesh.position.set(0, -0.05, 0.32);
     snoutMesh.scaling.set(1.2, 0.85, 1.0);
     snoutMesh.parent = this.headGroup;
 
-    // Nose
     const noseMesh = MeshBuilder.CreateSphere('player-nose', { diameter: 0.08, segments: 6 }, scene);
     noseMesh.material = glossMat('player-nose-mat', C.AMORA_NOSE, scene);
     noseMesh.position.set(0, 0.04, 0.44);
     noseMesh.parent = this.headGroup;
 
-    // Eyes
     for (const side of [-1, 1]) {
       const eyeMesh = MeshBuilder.CreateSphere(`player-eye${side}`, { diameter: 0.1, segments: 6 }, scene);
       eyeMesh.material = glossMat(`player-eye-mat${side}`, C.AMORA_EYE, scene);
       eyeMesh.position.set(side * 0.16, 0.08, 0.32);
       eyeMesh.parent = this.headGroup;
 
-      // Eye highlight
       const hlMesh = MeshBuilder.CreateSphere(`player-eyehl${side}`, { diameter: 0.036, segments: 4 }, scene);
       hlMesh.material = basicMat(`player-eyehl-mat${side}`, C.AMORA_EYE_HIGHLIGHT, scene);
       hlMesh.position.set(side * 0.145, 0.1, 0.355);
       hlMesh.parent = this.headGroup;
     }
 
-    // Ears
     for (const side of [-1, 1]) {
       const earMesh = MeshBuilder.CreateCylinder(`player-ear${side}`, {
         diameterTop: 0, diameterBottom: 0.24, height: 0.16, tessellation: 6,
@@ -138,19 +143,17 @@ export class Player extends Entity {
       earMesh.parent = this.headGroup;
     }
 
-    // Mouth (for bark)
     this.mouthMesh = MeshBuilder.CreateSphere('player-mouth', { diameter: 0.16, segments: 6 }, scene);
     this.mouthMesh.material = toonMat('player-mouth-mat', C.AMORA_TONGUE, scene);
     this.mouthMesh.position.set(0, -0.1, 0.4);
     this.mouthMesh.setEnabled(false);
     this.mouthMesh.parent = this.headGroup;
 
-    // --- LEGS ---
     const legPositions = [
-      { x: -0.28, z: 0.3, y: 0.15 },  // Front Left
-      { x: 0.28, z: 0.3, y: 0.15 },   // Front Right
-      { x: -0.22, z: -0.35, y: 0.15 }, // Back Left
-      { x: 0.22, z: -0.35, y: 0.15 },  // Back Right
+      { x: -0.28, z: 0.3, y: 0.15 },
+      { x: 0.28, z: 0.3, y: 0.15 },
+      { x: -0.22, z: -0.35, y: 0.15 },
+      { x: 0.22, z: -0.35, y: 0.15 },
     ];
     for (const [i, pos] of legPositions.entries()) {
       const legGroup = new TransformNode(`player-leg${i}`, scene);
@@ -167,7 +170,6 @@ export class Player extends Entity {
       legMesh.position.y = 0.05;
       legMesh.parent = legGroup;
 
-      // Paw
       const pawMesh = MeshBuilder.CreateSphere(`player-paw${i}`, { diameter: 0.24, segments: 6 }, scene);
       pawMesh.material = toonMat(`player-paw-mat${i}`, C.AMORA_CHEST, scene);
       pawMesh.scaling.set(1.1, 0.6, 1.2);
@@ -177,7 +179,6 @@ export class Player extends Entity {
       this.legs.push(legGroup);
     }
 
-    // --- SHADOW ---
     const shadowMesh = MeshBuilder.CreateDisc('player-shadow', { radius: 0.65, tessellation: 16 }, scene);
     const shadowMat = basicMat('player-shadow-mat', 0x000000, scene);
     shadowMat.alpha = 0.3;
@@ -189,78 +190,163 @@ export class Player extends Entity {
 
   initPhysics(physics: PhysicsWorld, x: number, y: number, z: number) {
     this.scene = physics.scene;
+    // Old controller is already cleaned up when the previous scene was disposed.
+    // Just null the reference — do NOT call dispose() as it would corrupt the plugin.
+    this.controller = null!;
+    // Reset model state so it rebuilds on the new scene
+    // (old meshes are destroyed when the previous scene is disposed)
+    this.modelBuilt = false;
+    this.legs = [];
+    this.barkWaveMesh = null;
     this.initMesh('player', this.scene);
     this.buildModel(this.scene);
 
-    this.mesh.position.set(x, y, z);
+    // Character controller capsule dimensions
+    const h = 1.2;
+    const r = 0.4;
 
-    const shape = new PhysicsShapeCapsule(
-      new Vector3(0, 0.35, 0),
-      new Vector3(0, -0.35, 0),
-      0.4,
-      this.scene
-    );
+    // Create the Havok character controller (NOT a PhysicsBody)
+    const startPos = new Vector3(x, y, z);
+    this.controller = new PhysicsCharacterController(startPos, { capsuleHeight: h, capsuleRadius: r }, this.scene);
+    this.controller.maxCharacterSpeedForSolver = 20;
 
-    this.body = new PhysicsBody(this.mesh, PhysicsMotionType.DYNAMIC, false, this.scene);
-    this.body.shape = shape;
-    this.body.setMassProperties({ mass: 1 });
-    this.body.setLinearDamping(0.3);
-    this.body.setAngularDamping(100);
+    // Register physics callback — runs AFTER each physics step
+    this.scene.onAfterPhysicsObservable.add(() => {
+      this.physicsUpdate();
+    });
   }
 
-  updatePlayer(dt: number, input: InputManager, camera: CameraSystem, physics: PhysicsWorld) {
-    super.update(dt);
-    if (!this.body || !this.alive) return;
+  /** Called after each Havok physics step to move the character */
+  private physicsUpdate() {
+    if (!this.scene || !this.alive) return;
+    const dt = (this.scene.deltaTime ?? 16.67) / 1000;
+    if (dt <= 0) return;
 
-    // Ground check via raycast
-    this.groundCheckTimer -= dt;
-    if (this.groundCheckTimer <= 0) {
-      this.groundCheckTimer = 0.05;
-      const pos = this.mesh.position;
-      // Ray starts from bottom of capsule (capsule pointB is at -0.35, radius 0.4)
-      const hit = physics.castRay(
-        { x: pos.x, y: pos.y - 0.75, z: pos.z },
-        { x: 0, y: -1, z: 0 },
-        0.3
-      );
-      this.isGrounded = hit !== null;
+    const down = new Vector3(0, -1, 0);
+    const support = this.controller.checkSupport(dt, down);
+
+    const desiredVelocity = this.computeDesiredVelocity(dt, support);
+    this.controller.setVelocity(desiredVelocity);
+    this.controller.integrate(dt, support, this.characterGravity);
+  }
+
+  private getNextState(support: { supportedState: CharacterSupportedState }): CharacterState {
+    if (this.charState === 'IN_AIR') {
+      if (support.supportedState === CharacterSupportedState.SUPPORTED) {
+        return 'ON_GROUND';
+      }
+      return 'IN_AIR';
+    } else if (this.charState === 'ON_GROUND') {
+      if (support.supportedState !== CharacterSupportedState.SUPPORTED) {
+        return 'IN_AIR';
+      }
+      if (this.wantJump > 0) {
+        this.wantJump--;
+        return 'START_JUMP';
+      }
+      return 'ON_GROUND';
+    } else if (this.charState === 'START_JUMP') {
+      return 'IN_AIR';
+    }
+    return this.charState;
+  }
+
+  private computeDesiredVelocity(
+    dt: number,
+    support: { supportedState: CharacterSupportedState; averageSurfaceNormal: Vector3; averageSurfaceVelocity: Vector3 },
+  ): Vector3 {
+    const nextState = this.getNextState(support);
+    if (nextState !== this.charState) {
+      this.charState = nextState;
     }
 
-    // Movement
-    const forward = camera.forwardXZ;
-    const right = camera.rightXZ;
-    const moveDir = new Vector3();
-    moveDir.addInPlace(forward.scale(input.moveForward));
-    moveDir.addInPlace(right.scale(input.moveRight));
+    const upWorld = new Vector3(0, 1, 0);
+    const forwardLocal = new Vector3(0, 0, 1);
+    const forwardWorld = forwardLocal.applyRotationQuaternion(this.characterOrientation);
+    const currentVelocity = this.controller.getVelocity();
 
-    const speed = input.isDown('ShiftLeft') ? this.runSpeed : this.walkSpeed;
-    const vel = this.body.getLinearVelocity();
+    if (this.charState === 'IN_AIR') {
+      const speed = this.isRunning ? this.inAirSpeed * this.runMultiplier : this.inAirSpeed;
+      const desiredVel = this.inputDir.scale(speed).applyRotationQuaternion(this.characterOrientation);
 
-    if (moveDir.lengthSquared() > 0) {
-      moveDir.normalize();
-      this.body.setLinearVelocity(new Vector3(
-        moveDir.x * speed,
-        vel.y,
-        moveDir.z * speed,
-      ));
+      const outputVel = this.controller.calculateMovement(
+        dt, forwardWorld, upWorld, currentVelocity, Vector3.ZeroReadOnly, desiredVel, upWorld,
+      );
+      // Restore vertical component from current velocity
+      outputVel.addInPlace(upWorld.scale(-outputVel.dot(upWorld)));
+      outputVel.addInPlace(upWorld.scale(currentVelocity.dot(upWorld)));
+      // Apply gravity
+      outputVel.addInPlace(this.characterGravity.scale(dt));
+      return outputVel;
+    } else if (this.charState === 'ON_GROUND') {
+      const speed = this.isRunning ? this.onGroundSpeed * this.runMultiplier : this.onGroundSpeed;
+      const desiredVel = this.inputDir.scale(speed).applyRotationQuaternion(this.characterOrientation);
 
-      // Face movement direction
-      const targetAngle = Math.atan2(moveDir.x, moveDir.z);
-      this.mesh.rotation.y = targetAngle;
+      const outputVel = this.controller.calculateMovement(
+        dt, forwardWorld, support.averageSurfaceNormal, currentVelocity,
+        support.averageSurfaceVelocity, desiredVel, upWorld,
+      );
+      // Horizontal projection (from Babylon.js character controller example)
+      outputVel.subtractInPlace(support.averageSurfaceVelocity);
+      const inv1k = 1e-3;
+      if (outputVel.dot(upWorld) > inv1k) {
+        const velLen = outputVel.length();
+        outputVel.normalizeFromLength(velLen);
+        const horizLen = velLen / support.averageSurfaceNormal.dot(upWorld);
+        const c = support.averageSurfaceNormal.cross(outputVel);
+        const projected = c.cross(upWorld);
+        projected.scaleInPlace(horizLen);
+        projected.addInPlace(support.averageSurfaceVelocity);
+        return projected;
+      }
+      outputVel.addInPlace(support.averageSurfaceVelocity);
+      return outputVel;
+    } else if (this.charState === 'START_JUMP') {
+      const u = Math.sqrt(2 * this.characterGravity.length() * this.jumpHeight);
+      const curRelVel = currentVelocity.dot(upWorld);
+      return currentVelocity.add(upWorld.scale(u - curRelVel));
+    }
+    return Vector3.Zero();
+  }
 
-      // Walk animation
-      this.walkCycle += dt * (input.isDown('ShiftLeft') ? 15 : 10);
+  updatePlayer(dt: number, input: InputManager, camera: CameraSystem, _physics: PhysicsWorld) {
+    super.update(dt);
+    if (!this.alive) return;
+
+    // Sync visual mesh position from character controller
+    const controllerPos = this.controller.getPosition();
+    this.mesh.position.copyFrom(controllerPos);
+    // Offset visual down so the dog model sits at ground level
+    // (controller position is capsule center, model origin is at feet)
+    this.mesh.position.y -= 0.6;
+
+    // Store input direction in local space (z=forward, x=strafe)
+    this.inputDir.set(input.moveRight, 0, input.moveForward);
+    if (this.inputDir.lengthSquared() > 1) {
+      this.inputDir.normalize();
+    }
+
+    // Camera yaw → character orientation
+    const fwd = camera.forwardXZ;
+    const cameraYaw = Math.atan2(fwd.x, fwd.z);
+    Quaternion.RotationYawPitchRollToRef(cameraYaw, 0, 0, this.characterOrientation);
+
+    this.isRunning = input.isDown('ShiftLeft');
+
+    if (input.jump) {
+      this.wantJump++;
+    }
+
+    // Facing direction (for visual rotation and bark)
+    if (this.inputDir.lengthSquared() > 0.01) {
+      const worldDir = this.inputDir.applyRotationQuaternion(this.characterOrientation);
+      this.facingAngle = Math.atan2(worldDir.x, worldDir.z);
+      this.mesh.rotation.y = this.facingAngle;
+
+      this.walkCycle += dt * (this.isRunning ? 15 : 10);
       this.animateWalk();
     } else {
-      this.body.setLinearVelocity(new Vector3(0, vel.y, 0));
       this.animateIdle(dt);
-    }
-
-    // Jump
-    if (input.jump && this.isGrounded) {
-      const curVel = this.body.getLinearVelocity();
-      this.body.setLinearVelocity(new Vector3(curVel.x, this.jumpForce, curVel.z));
-      this.isGrounded = false;
     }
 
     // Power charge
@@ -272,7 +358,7 @@ export class Player extends Entity {
       }
     }
 
-    // Super bar charges only when bark power is full
+    // Super bar
     if (this.isPowerReady && !this.isSuperReady) {
       this.superCharge += dt;
       if (this.superCharge >= this.superChargeTime) {
@@ -296,20 +382,27 @@ export class Player extends Entity {
     }
   }
 
+  override get position(): Vector3 {
+    if (this.controller) {
+      return this.controller.getPosition().clone();
+    }
+    return this.mesh.position.clone();
+  }
+
+  get isGrounded(): boolean {
+    return this.charState === 'ON_GROUND';
+  }
+
   usePower(): boolean {
     if (!this.isPowerReady || !this.scene) return false;
     this.isPowerReady = false;
     this.powerCharge = 0;
 
-    // Show mouth for bark
     this.mouthMesh.setEnabled(true);
     setTimeout(() => { this.mouthMesh.setEnabled(false); }, 500);
 
-    // Create bark wave visual (torus instead of ring)
     const waveMesh = MeshBuilder.CreateTorus('bark-wave', {
-      diameter: 5,
-      thickness: 0.3,
-      tessellation: 16,
+      diameter: 5, thickness: 0.3, tessellation: 16,
     }, this.scene);
     const waveMat = basicMat('bark-wave-mat', C.POWER_WAVE, this.scene);
     waveMat.alpha = 1;
@@ -318,12 +411,8 @@ export class Player extends Entity {
 
     waveMesh.position.copyFrom(this.mesh.position);
     waveMesh.position.y += 1;
-    const fwd = new Vector3(
-      Math.sin(this.mesh.rotation.y),
-      0,
-      Math.cos(this.mesh.rotation.y),
-    );
-    waveMesh.position.addInPlace(fwd.scale(1.5));
+    const fwdDir = new Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
+    waveMesh.position.addInPlace(fwdDir.scale(1.5));
     this.barkWaveTimer = 0.5;
     this.barkWaveMesh = waveMesh;
 
@@ -338,22 +427,23 @@ export class Player extends Entity {
   }
 
   getBarkDirection(): Vector3 {
-    return new Vector3(
-      Math.sin(this.mesh.rotation.y),
-      0,
-      Math.cos(this.mesh.rotation.y),
-    );
+    return new Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
   }
 
   getVelocityY(): number {
-    if (!this.body) return 0;
-    return this.body.getLinearVelocity().y;
+    if (!this.controller) return 0;
+    return this.controller.getVelocity().y;
   }
 
   bounce() {
-    if (!this.body) return;
-    const vel = this.body.getLinearVelocity();
-    this.body.setLinearVelocity(new Vector3(vel.x, 10, vel.z));
+    if (!this.controller) return;
+    const vel = this.controller.getVelocity();
+    this.controller.setVelocity(new Vector3(vel.x, 10, vel.z));
+  }
+
+  applyKnockback(velocity: Vector3) {
+    if (!this.controller) return;
+    this.controller.setVelocity(velocity);
   }
 
   get powerPercent(): number {
@@ -367,32 +457,22 @@ export class Player extends Entity {
   private animateWalk() {
     const sin = Math.sin(this.walkCycle);
     const cos = Math.cos(this.walkCycle);
-    // Front legs
     this.legs[0].rotation.x = sin * 0.5;
     this.legs[1].rotation.x = -sin * 0.5;
-    // Back legs
     this.legs[2].rotation.x = -sin * 0.5;
     this.legs[3].rotation.x = sin * 0.5;
-    // Torso bobble
     this.torsoGroup.position.y = 0.5 + Math.abs(cos) * 0.05;
-    // Head rotation
     this.headGroup.rotation.x = Math.sin(this.walkCycle * 0.5) * 0.05;
-    // Tail wag
     this.tailMesh.rotation.z = Math.sin(this.walkCycle * 2) * 0.2;
   }
 
   private animateIdle(dt: number) {
     this.walkCycle += dt * 2;
     const breathe = Math.sin(this.walkCycle) * 0.02;
-
-    // Scale on Y handles the breathing
     this.torsoGroup.scaling.y = 1.0 + breathe;
-
-    // Reset legs
     for (const leg of this.legs) {
       leg.rotation.x *= 0.9;
     }
-    // Gentle tail wag
     this.tailMesh.rotation.z = Math.sin(this.walkCycle * 1.5) * 0.05;
   }
 
@@ -404,9 +484,11 @@ export class Player extends Entity {
     this.superCharge = 0;
     this.isSuperReady = false;
     this.invincibleTimer = 0;
-    if (this.body) {
-      this.mesh.position.set(x, y, z);
-      this.body.setLinearVelocity(Vector3.Zero());
+    this.charState = 'IN_AIR';
+    this.wantJump = 0;
+    if (this.controller) {
+      this.controller.setPosition(new Vector3(x, y, z));
+      this.controller.setVelocity(Vector3.Zero());
     }
   }
 }

@@ -7,7 +7,6 @@ import { PhysicsShapeMesh } from '@babylonjs/core/Physics/v2/physicsShape';
 import { PhysicsShape } from '@babylonjs/core/Physics/v2/physicsShape';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
-import { Ray } from '@babylonjs/core/Culling/ray';
 import HavokPhysics from '@babylonjs/havok';
 
 // Side-effect import: patches Scene.prototype with enablePhysics()
@@ -16,26 +15,39 @@ import '@babylonjs/core/Physics/v2/physicsEngineComponent';
 export class PhysicsWorld {
   private plugin!: HavokPlugin;
   private _scene!: Scene;
-  private initialized = false;
+  private havokInstance: any = null;
 
   async init(scene?: Scene): Promise<void> {
-    // Only create the HavokPhysics instance once; reuse the plugin across levels
-    if (!this.initialized) {
-      const havokInstance = await HavokPhysics();
-      this.plugin = new HavokPlugin(true, havokInstance);
-      this.initialized = true;
+    // Only create the WASM instance once (expensive); create a fresh plugin per scene
+    if (!this.havokInstance) {
+      this.havokInstance = await HavokPhysics();
     }
 
     if (scene) {
       this._scene = scene;
-      scene.enablePhysics(new Vector3(0, -20, 0), this.plugin);
+      // Create a NEW HavokPlugin for each scene — reusing the plugin after
+      // scene.dispose() corrupts its internal state (floatingOrigin becomes undefined)
+      this.plugin = new HavokPlugin(true, this.havokInstance);
+      scene.enablePhysics(new Vector3(0, -18, 0), this.plugin);
+
+      // Configure fixed physics timestep for consistent simulation
+      const physicsEngine = scene.getPhysicsEngine();
+      if (physicsEngine) {
+        physicsEngine.setTimeStep(1 / 60);
+      }
     }
   }
 
   /** Attach physics to an existing scene (used when scene is created separately) */
   enablePhysicsOnScene(scene: Scene): void {
     this._scene = scene;
-    scene.enablePhysics(new Vector3(0, -20, 0), this.plugin);
+    this.plugin = new HavokPlugin(true, this.havokInstance);
+    scene.enablePhysics(new Vector3(0, -18, 0), this.plugin);
+
+    const physicsEngine = scene.getPhysicsEngine();
+    if (physicsEngine) {
+      physicsEngine.setTimeStep(1 / 60);
+    }
   }
 
   get scene(): Scene {
@@ -48,7 +60,6 @@ export class PhysicsWorld {
 
   step(_dt: number): void {
     // Havok steps automatically with the Babylon.js scene render loop.
-    // This method is kept for API compatibility.
   }
 
   createDynamicBody(node: TransformNode, shape: PhysicsShape, mass = 1): PhysicsBody {
@@ -67,21 +78,5 @@ export class PhysicsWorld {
 
   removeBody(body: PhysicsBody): void {
     body.dispose();
-  }
-
-  castRay(
-    origin: { x: number; y: number; z: number },
-    direction: { x: number; y: number; z: number },
-    maxDistance: number,
-  ) {
-    const ray = new Ray(
-      new Vector3(origin.x, origin.y, origin.z),
-      new Vector3(direction.x, direction.y, direction.z),
-      maxDistance,
-    );
-    const predicate = (mesh: import('@babylonjs/core/Meshes/abstractMesh').AbstractMesh) =>
-      mesh.name.includes('terrain') || mesh.name.includes('ground') || mesh.name.includes('floor');
-    const hit = this._scene.pickWithRay(ray, predicate);
-    return hit?.hit ? hit : null;
   }
 }

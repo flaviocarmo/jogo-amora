@@ -232,13 +232,13 @@ export class Chicken extends Enemy {
 
   updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
-    if (!this.alive || !this.body) return;
+    if (!this.alive || !this.hasController) return;
 
-    const vel = this.body.getLinearVelocity();
+    const vel = this.getControllerVelocity();
     const pos = this.mesh.position;
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.1;
-    const isGrounded = vel.y >= -0.15 && vel.y <= 0.15 && pos.y < 1.2;
+    const isGrounded = this._isGrounded;
 
     const distToPlayer = Math.sqrt(
       (pos.x - playerPos.x) ** 2 + (pos.z - playerPos.z) ** 2
@@ -254,7 +254,7 @@ export class Chicken extends Enemy {
         const dx = playerPos.x - pos.x;
         const dz = playerPos.z - pos.z;
         const d = Math.sqrt(dx * dx + dz * dz) || 1;
-        this.body.setLinearVelocity(new Vector3(
+        this.setDirectVelocity(new Vector3(
           vel.x + (dx / d) * 3.5,
           4.5,
           vel.z + (dz / d) * 3.5,
@@ -309,7 +309,7 @@ export class Chicken extends Enemy {
         this.isWingFlapping = true;
         this.wingFlapDuration = 0.6 + Math.random() * 0.4;
         this.wingFlapTimer = 4 + Math.random() * 3;
-        this.body.setLinearVelocity(new Vector3(vel.x, 3.5, vel.z));
+        this.setDirectVelocity(new Vector3(vel.x, 3.5, vel.z));
       }
     }
 

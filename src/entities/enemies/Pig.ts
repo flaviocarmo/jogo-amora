@@ -146,9 +146,9 @@ export class Pig extends Enemy {
 
   updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
-    if (!this.alive || !this.body) return;
+    if (!this.alive || !this.hasController) return;
 
-    const vel = this.body.getLinearVelocity();
+    const vel = this.getControllerVelocity();
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.1;
 
@@ -198,7 +198,7 @@ export class Pig extends Enemy {
         const dz = playerPos.z - pos.z;
         const d = Math.sqrt(dx * dx + dz * dz);
         if (d > 0) {
-          this.body.setLinearVelocity(new Vector3(
+          this.setDirectVelocity(new Vector3(
             (dx / d) * this.speed * 3.5,
             2.5,
             (dz / d) * this.speed * 3.5,

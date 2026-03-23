@@ -19,7 +19,9 @@
       "Read(//c/drive-d/projetos/jogo-amora/**)",
       "Bash(done)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Read(//c/drive-d/projetos/jogo-amora/$APPDATA/**)",
+      "Read(//c/drive-d/projetos/jogo-amora/$LOCALAPPDATA/**)"
     ]
   }
 }

@@ -105,7 +105,8 @@ export class Terrain {
     const halfW = this.width / 2;
     const halfD = this.depth / 2;
     const nx = ((x + halfW) / this.width) * this.segments;
-    const nz = ((z + halfD) / this.depth) * this.segments;
+    // Babylon.js CreateGround has Z inverted: row 0 = +Z, row N = -Z
+    const nz = ((halfD - z) / this.depth) * this.segments;
     const ix = Math.floor(Math.max(0, Math.min(this.segments, nx)));
     const iz = Math.floor(Math.max(0, Math.min(this.segments, nz)));
     const idx = iz * (this.segments + 1) + ix;

@@ -19,13 +19,23 @@ export class CameraSystem {
   }
 
   get forwardXZ(): Vector3 {
-    const alpha = this.camera.alpha;
-    return new Vector3(Math.sin(alpha), 0, Math.cos(alpha)).normalize();
+    // ArcRotateCamera: camera position = target + spherical(alpha, beta, radius)
+    // Camera pos offset: x = radius*cos(beta)*sin(alpha), z = radius*cos(beta)*cos(alpha)
+    // Forward (camera→target) on XZ: negate the offset direction
+    // At alpha=-PI/2: sin(-PI/2)=-1, cos(-PI/2)=0 → offset=(-r,0,0) → forward=(1,0,0)?
+    // NO — we want forward to mean "the direction the player walks when pressing W"
+    // which is INTO the screen. Use camera's actual forward direction projected onto XZ.
+    const fwd = this.camera.getTarget().subtract(this.camera.position);
+    fwd.y = 0;
+    if (fwd.lengthSquared() < 0.001) return new Vector3(0, 0, 1);
+    fwd.normalize();
+    return fwd;
   }
 
   get rightXZ(): Vector3 {
-    const alpha = this.camera.alpha;
-    return new Vector3(Math.cos(alpha), 0, -Math.sin(alpha)).normalize();
+    // Right = forward cross up
+    const fwd = this.forwardXZ;
+    return new Vector3(fwd.z, 0, -fwd.x); // cross product with (0,1,0)
   }
 
   update(playerPos: Vector3, mouseDX: number, mouseDY: number, dt: number) {

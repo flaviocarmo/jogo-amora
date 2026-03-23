@@ -137,14 +137,14 @@ export class Rat extends Enemy {
 
   updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
-    if (!this.alive || !this.body) return;
+    if (!this.alive || !this.hasController) return;
 
     // Erratic zigzag: add random lateral velocity every 0.5s while chasing
     if (this.state === EnemyState.CHASE) {
       this.zigzagTimer -= dt;
       if (this.zigzagTimer <= 0) {
         this.zigzagTimer = this.zigzagInterval;
-        const vel = this.body.getLinearVelocity();
+        const vel = this.getControllerVelocity();
         const lateralX = -vel.z;
         const lateralZ = vel.x;
         const lateralLen = Math.sqrt(lateralX * lateralX + lateralZ * lateralZ);
@@ -152,7 +152,7 @@ export class Rat extends Enemy {
           const nx = lateralX / lateralLen;
           const nz = lateralZ / lateralLen;
           const kick = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
-          this.body.setLinearVelocity(new Vector3(
+          this.setDirectVelocity(new Vector3(
             vel.x + nx * kick,
             vel.y,
             vel.z + nz * kick,
@@ -164,7 +164,7 @@ export class Rat extends Enemy {
     }
 
     // Animation
-    const vel = this.body.getLinearVelocity();
+    const vel = this.getControllerVelocity();
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.1;
 

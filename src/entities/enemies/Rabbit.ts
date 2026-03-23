@@ -125,20 +125,20 @@ export class Rabbit extends Enemy {
 
   updateAI(dt: number, playerPos: Vector3) {
     super.updateAI(dt, playerPos);
-    if (!this.alive || !this.body) return;
+    if (!this.alive || !this.hasController) return;
 
-    const vel = this.body.getLinearVelocity();
+    const vel = this.getControllerVelocity();
     const speedSq = vel.x * vel.x + vel.z * vel.z;
     const isMoving = speedSq > 0.1;
 
     const pos = this.mesh.position;
-    const isGrounded = vel.y >= -0.5 && vel.y <= 0.5;
+    const isGrounded = this._isGrounded;
 
     // Jumping Logic
     this.jumpTimer -= dt;
     if (this.jumpTimer <= 0 && this.state === EnemyState.CHASE && isGrounded) {
       this.isJumping = true;
-      this.body.setLinearVelocity(new Vector3(vel.x * 1.5, 7, vel.z * 1.5));
+      this.setDirectVelocity(new Vector3(vel.x * 1.5, 7, vel.z * 1.5));
       this.jumpTimer = 1.0 + Math.random() * 1.5;
     }
 
